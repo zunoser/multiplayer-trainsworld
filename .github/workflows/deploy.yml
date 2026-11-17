@@ -58,7 +58,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: '1ee487160d1c8983651d4fafc7be51c5'
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Configure the CLOUDFLARE_API_TOKEN repository secret for this Worker.'; exit 1; }
-          npx cf deploy --prebuilt --mode production --provision=false
+          npx cf deploy --prebuilt --mode production --provision=false --force
           node check-deployment.mjs
       - name: Replace the retained release after successful deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

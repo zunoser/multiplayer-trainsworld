@@ -6,6 +6,8 @@ Each run installs locked npm dependencies, builds both WASM modules with wasm-pa
 
 The configuration retains the `ASSETS`, `ROOMS`, `LOGIN_LIMIT` and `ROOM_PASSWORD` bindings, the SQLite `RailwayRoom` export, the 50 ms CPU limit and disabled Workers cache. The cf uploader preserves existing secret bindings. Deployment disables resource provisioning, so missing existing resources cause failure rather than creating a replacement namespace. It does not reset room data or change the shared password.
 
+The deploy command uses `--force` to accept code and configuration from main when the existing Worker was last updated through the script API. Without it, cf aborts non-interactive uploads before changing the Worker. Main is the source of truth for code and configuration; external script-API edits will be overwritten by the next main deployment.
+
 Only the API routes, WebSocket route and health route invoke the Worker before static assets. HTML uses no-store; hashed assets use immutable caching. After a successful deployment and smoke test, the workflow caches that release's assets. The next deployment also includes them, so already-open browsers can finish loading their existing chunks. Retention covers the current and immediately previous CI release; the initial CI run has no cache of the earlier manual deployment.
 
 ## Activate
