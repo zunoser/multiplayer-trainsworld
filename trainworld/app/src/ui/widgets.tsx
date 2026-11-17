@@ -398,13 +398,13 @@ export function LevelButtons({ value, onPick, tip }: { value: Level | null; onPi
 
 /** The track count's 1-line and 2-line icon buttons, `value` on (null: neither), the track tool's (T-2931, with its
  * quad button as `children`) and the Select tool's bar's (T-3321). `single` false hides the 1-line one. */
-export function TrackCountButtons({ value, onPick, single = true, children }: { value: 1 | 2 | null; onPick: (n: 1 | 2) => void; single?: boolean; children?: ComponentChildren }) {
+export function TrackCountButtons({ value, onPick, single = true, labeled = false, children }: { value: 1 | 2 | null; onPick: (n: 1 | 2) => void; single?: boolean; labeled?: boolean; children?: ComponentChildren }) {
   return (
     <div class="group tb-count" role="group" aria-label={t("toolBar.trackCount")}>
-      {single && <button class={"btn icon" + (value === 1 ? " on" : "")} aria-label={t("toolBar.singleTrack")} aria-pressed={value === 1} data-tip={t("toolBar.singleTrack")}
-        onClick={() => onPick(1)}><Icon.tracks1 /></button>}
-      <button class={"btn icon" + (value === 2 ? " on" : "")} aria-label={t("toolBar.doubleTrack")} aria-pressed={value === 2} data-tip={t("toolBar.doubleTrack")}
-        onClick={() => onPick(2)}><Icon.tracks2 /></button>
+      {single && <button class={"btn " + (labeled ? "text" : "icon") + (value === 1 ? " on" : "")} aria-label={t("toolBar.singleTrack")} aria-pressed={value === 1} data-tip={t("toolBar.singleTrack")}
+        onClick={() => onPick(1)}><Icon.tracks1 />{labeled && t("toolBar.singleTrack")}</button>}
+      <button class={"btn " + (labeled ? "text" : "icon") + (value === 2 ? " on" : "")} aria-label={t("toolBar.doubleTrack")} aria-pressed={value === 2} data-tip={t("toolBar.doubleTrack")}
+        onClick={() => onPick(2)}><Icon.tracks2 />{labeled && t("toolBar.doubleTrack")}</button>
       {children}
     </div>
   );
