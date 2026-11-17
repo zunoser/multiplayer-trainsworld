@@ -39,5 +39,16 @@ try {
  await bar.getByRole('button',{name:'複線',exact:true}).click();
  assert.equal(await bar.getByRole('button',{name:'複線',exact:true}).getAttribute('aria-pressed'),'true');
  await mkdir(ARTIFACTS,{recursive:true});await guest.screenshot({path:ARTIFACTS+'/multiplayer-double-track.png'});
+ for (const width of [320,375,600,768]) {
+  await guest.setViewportSize({width,height:900});
+  for (const name of ['単線','複線','複々線']) {
+   const button=bar.getByRole('button',{name,exact:true});
+   await button.click();
+   assert.equal(await button.getAttribute('aria-pressed'),'true');
+   const bounds=await button.boundingBox();
+   assert(bounds&&bounds.x>=0&&bounds.x+bounds.width<=width,`${name} clipped at ${width}px`);
+  }
+  if(width===375)await guest.screenshot({path:ARTIFACTS+'/multiplayer-double-track-mobile.png'});
+ }
  console.log('PASS single/double construction, blueprint and built conversion, late join, host transfer, and labeled controls');
 }finally{await browser.close();}
