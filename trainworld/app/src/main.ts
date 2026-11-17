@@ -110,6 +110,9 @@ import { choiceFromUrl, showStartMenu, START_LOGO, worldCover } from "./ui/Start
 import { viewStart } from "./ui/locate";
 import { enterGame, fitAhead, startOpenFit } from "./ui/locate";
 import { realmsAhead } from "./game/realms";
+import { showMultiplayerLobby } from "./ui/MultiplayerLobby";
+import { startSharedCursors } from "./ui/SharedCursors";
+import { cooperative, cooperativeAuthority } from "./game/multiplayerGate";
 import * as multiplayerSession from "./game/multiplayer";
 import { ClockClient, clockWorkerStatus, manageSaveSlot, onNetAhead, onNetworkSnapshot, onStationsAhead } from "./workers/clockClient";
 import { demandStuckSince, netAhead, startDemand, stationsAhead, submitNetwork } from "./workers/demandClient";
@@ -140,7 +143,7 @@ startTips();
 
 // ---- the clock: a new game starts on day 1 at 07:00 (morning peak) ----
 startClock(86400 + 7 * 3600);
-effect(() => clock.setBackground(display.value.runInBackground));
+effect(() => clock.setBackground(display.value.runInBackground || cooperativeAuthority.value));
 if (params.get("paused") === "1") clock.setRunning(false);
 // T-149, T-172: the clock is held until the viewed city's demand has its first estimate
 startLoadingGate();
@@ -160,7 +163,7 @@ if (!hasWasmSimd()) {
 // T-2545: the last load in this tab never ended (iOS reloads a page that ran out of memory): say so and
 // start no game, or a game too big for the device would load and die again
 const lastDied = lastLoadDied();
-const urlChoice = lastDied ? null : choiceFromUrl();
+const urlChoice = !DEBUG || lastDied ? null : choiceFromUrl();
 if (lastDied) loadCannotFinish(outOfMemoryText(), true);
 // Demand pool (T-026) first: its downloads and pack opening are the longest part of startup, so
 // they start before the map is set up (T-172). The clock worker's network snapshots go to
@@ -178,6 +181,7 @@ if (urlChoice) {
 // T-927: the menu's class goes on before the map is made, so the map is sized without the dock
 if (!urlChoice) document.documentElement.classList.add("choosing");
 const map = createMap(document.getElementById("map")!);
+startSharedCursors(map);
 if (!urlChoice) map.jumpTo(worldCover(map.getContainer()));
 // T-2774: the launch video's view (`?video=1`, video.tsx) has no boundaries and nothing darkened
 if (!VIDEO) {
@@ -694,7 +698,7 @@ window.addEventListener("keydown", (e) => {
   // Space: pause, or carry on at the speed that was running (the clock keeps it while paused).
   if (e.key === " " && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
-    clock.setRunning(!clock.running.peek());
+    if (!cooperative.peek() || cooperativeAuthority.peek()) clock.setRunning(!clock.running.peek());
   }
 });
 // A focused button would also "click" on the space bar's keyup; the key is ours.
@@ -719,7 +723,7 @@ onStationsAhead((frame, xy, fine, built, home) => {
 onNetAhead(netAhead);
 
 // ---- T-677: the start menu; the pick starts demand, then the clock worker, in startup's order ----
-if (!urlChoice) showStartMenu((choice) => {
+if (!urlChoice) showMultiplayerLobby((choice) => {
   // T-728: a new game opens on its start city, or the world map; a real network (T-731) has stations, so it does not open bare
   enterGame(); // T-2477: a pan before the pick does not count
   if (choice.game) viewStart(choice.game.start, choice.game.mode);

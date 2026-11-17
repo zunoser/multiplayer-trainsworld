@@ -1,3 +1,4 @@
+import type { CooperativeContext, CooperativeResult } from "./protocol";
 // Main-thread side of the clock worker (T-025). Never waits on it: requests go out, answers
 // arrive as messages. Each "state" becomes the `world` snapshot (game/world.ts) and the
 // renderer's buffers; "trips" go to the renderer; network snapshots go to whoever registered
@@ -42,7 +43,7 @@ import { saveRefusal } from "../game/memoryCheck";
 import { askBeforeLeaving, keepStorage } from "../game/saveSafety";
 import { afterPaint, BUSY_MS, expectedMs, hideBusy, learnBusy, showBusy } from "../game/busy";
 import { addTerrainGrid, dropTerrainGrids, groundNet, setTerrainIndex } from "../game/terrain";
-import { cooperativeBlocks, cooperativeReadOnly } from "../game/multiplayerGate";
+import { cooperativeBlocks, cooperativeReadOnly, cooperativeEditSink, cooperativeAuthority, cooperative } from "../game/multiplayerGate";
 import { letterOf } from "../game/lineLetter";
 
 /** Text from the clock worker: it sends message keys (docs/localization.md "Workers"), worded here; anything else as it is. */
@@ -350,14 +351,30 @@ function toWorld(s: ClockState): WorldView {
 let current: ClockClient | null = null;
 let cooperativeLoad: ((error?: string) => void) | null = null;
 /** The caller serializes checkpoints. Acknowledged only after the worker has applied the whole world. */
-export function applyCooperativeSave(bytes: Uint8Array, first: boolean): Promise<void> {
+export function applyCooperativeSave(bytes: Uint8Array, first: boolean, ids?: Uint32Array): Promise<void> {
   if (!current || cooperativeLoad) return Promise.reject(new Error("Cooperative load unavailable"));
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { cooperativeLoad = null; reject(new Error("Cooperative load timed out")); }, 120_000);
     cooperativeLoad = error => { clearTimeout(timer); cooperativeLoad = null; error ? reject(new Error(error)) : resolve(); };
-    current!.post({ kind: "coopSnapshot", bytes, first, name: t("multiplayer.world") });
+    current!.post({ kind: "coopSnapshot", bytes, first, ids, name: t("multiplayer.world") });
   });
 }
+
+let cooperativeSeq = -1;
+const cooperativePending = new Map<number, { done: (value: unknown) => void; fail: (error: Error) => void }>();
+function cooperativeRequest<T>(make: (seq: number) => ToClock): Promise<T> {
+  if (!current) return Promise.reject(new Error("Game unavailable"));
+  const seq = cooperativeSeq--;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => { cooperativePending.delete(seq); reject(new Error("Synchronization timed out")); }, 60_000);
+    cooperativePending.set(seq, { done: value => { clearTimeout(timer); resolve(value as T); }, fail: error => { clearTimeout(timer); reject(error); } });
+    current!.post(make(seq));
+  });
+}
+export const runCooperativeCommand = (op: EditOp, context?: CooperativeContext) => cooperativeRequest<CooperativeResult>(seq => ({ kind: "coopCommand", seq, op, context }));
+export const readCooperativeContext = () => cooperativeRequest<CooperativeContext>(seq => ({ kind: "coopRead", seq }));
+export const exportCooperativeSave = () => cooperativeRequest<{ bytes: Uint8Array; ids: Uint32Array }>(seq => ({ kind: "coopExport", seq }));
+export function takeCooperativeTime(context: CooperativeContext) { current?.post({ kind: "coopTime", context }); }
 
 /** Download the game as a file (T-029). */
 export function exportGame() {
@@ -909,6 +926,8 @@ export class ClockClient {
   private posts = 0;
   private readsOut = new Map<string, { posts: number; p: Promise<Float64Array> }>();
   post(msg: ToClock, transfer: Transferable[] = []) {
+    if (msg.kind === "clock" && cooperativeReadOnly.peek()) return;
+    if (msg.kind === "clock" && cooperativeEditSink.value && !cooperativeAuthority.peek()) return;
     if (cooperativeBlocks(msg)) { say(t("multiplayer.readOnly"), true); return; }
     if (tracing() && msg.kind === "edit") trace("clock-post", { seq: msg.seq, edit: editTrace(msg.op) });
     this.posts++;
@@ -1212,8 +1231,17 @@ export class ClockClient {
         break;
       }
       case "unsaved":
-        askBeforeLeaving(msg.on);
+        if (!cooperative.peek()) askBeforeLeaving(msg.on);
         break;
+      case "coopResult":
+      case "coopContext":
+      case "coopExported": {
+        const p = cooperativePending.get(msg.seq); cooperativePending.delete(msg.seq);
+        if (msg.kind === "coopResult") msg.error ? p?.fail(new Error(msg.error)) : p?.done(msg.result);
+        else if (msg.kind === "coopContext") p?.done(msg.context);
+        else p?.done({ bytes: msg.bytes, ids: msg.ids });
+        break;
+      }
       case "coopApplied":
         cooperativeLoad?.(msg.error);
         break;
@@ -1367,7 +1395,7 @@ export class ClockClient {
 
   /** T-3297: `flipSide` above. */
   flipSide(): Promise<Float64Array> {
-    if (cooperativeReadOnly.peek()) { say(t("multiplayer.readOnly"), true); return Promise.resolve(new Float64Array()); }
+    if (cooperative.peek()) { say(t("multiplayer.readOnly"), true); return Promise.resolve(new Float64Array()); }
     const seq = ++this.seq;
     this.post({ kind: "flipSide", seq });
     return new Promise<Float64Array>((res) => this.queries.set(seq, res));
@@ -1376,6 +1404,7 @@ export class ClockClient {
   /** Send an edit; the promise resolves with the worker's answer. `early` "rows": a stop click's (T-2766), answered
    * once the world holds it, its network a moment after the clicks stop. */
   edit(op: EditOp, early: boolean | "rows" = false): Promise<EditAnswer> {
+    if (!cooperativeReadOnly.peek() && cooperativeEditSink.peek()) return cooperativeEditSink.peek()!(op);
     if (cooperativeReadOnly.peek()) return Promise.resolve({ ok: false, issues: [t("multiplayer.readOnly")], charge: 0 });
     const seq = ++this.seq;
     if (early === "rows") {

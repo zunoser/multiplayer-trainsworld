@@ -143,16 +143,12 @@ export function Dock() {
             <Glyph />
           </button>
         ))}
-        {/* T-251: the saved games open in their own panel, not as a tab */}
-        <button class="tab gear save" data-tip={t("dock.saves")} aria-label={t("dock.saves")} onClick={() => (savesOpen.value = true)}>
-          <Icon.save />
-        </button>
+        <button class="tab gear" data-tip={t("lobby.room")} aria-label={t("lobby.room")} onClick={() => (tab.value = "settings")}><Icon.people /></button>
         <button class={"tab gear" + (cur === "settings" ? " on" : "")} data-tip={[t("dock.settings"), replyTip()].filter(Boolean).join("\n")} aria-label={t("dock.settings")} aria-pressed={cur === "settings"} onClick={() => (tab.value = "settings")}>
           <Icon.gear />
           <NewReplyDot />
         </button>
       </nav>
-      <SavesPanel />
       <HelpPanel />
       <MareyPanel />
       <SchedulePanel />

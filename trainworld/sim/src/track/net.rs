@@ -432,6 +432,8 @@ pub struct Network {
     frame: Frame,
     /// Running side from the city pack: right in the US, left in Japan and the UK.
     pub right_hand: bool,
+    /// Cooperative allocation is independent of local preview free-list ordering.
+    pub cooperative_ids: bool,
 
     pub node_alive: Vec<bool>,
     pub node_x: Vec<f64>,
@@ -795,6 +797,7 @@ impl Network {
             frame_kind: FrameKind::Equirect,
             frame: Frame::new(FrameKind::Equirect, origin_lon, origin_lat),
             right_hand,
+            cooperative_ids: false,
             node_alive: vec![],
             node_x: vec![],
             node_y: vec![],
@@ -993,19 +996,31 @@ impl Network {
 
     /// A free node id for a new node (claimed when the op adding it is applied).
     pub fn alloc_node(&mut self) -> u32 {
-        self.node_free.pop().unwrap_or_else(|| {
+        let free = if self.cooperative_ids {
+            self.node_free.iter().enumerate().min_by_key(|(_, id)| **id).map(|(i, _)| i)
+                .map(|i| self.node_free.swap_remove(i))
+        } else { self.node_free.pop() };
+        free.unwrap_or_else(|| {
             self.grow_nodes();
             self.node_alive.len() as u32 - 1
         })
     }
     pub fn alloc_edge(&mut self) -> u32 {
-        self.edge_free.pop().unwrap_or_else(|| {
+        let free = if self.cooperative_ids {
+            self.edge_free.iter().enumerate().min_by_key(|(_, id)| **id).map(|(i, _)| i)
+                .map(|i| self.edge_free.swap_remove(i))
+        } else { self.edge_free.pop() };
+        free.unwrap_or_else(|| {
             self.grow_edges();
             self.edge_alive.len() as u32 - 1
         })
     }
     pub fn alloc_line(&mut self) -> u32 {
-        self.line_free.pop().unwrap_or_else(|| {
+        let free = if self.cooperative_ids {
+            self.line_free.iter().enumerate().min_by_key(|(_, id)| **id).map(|(i, _)| i)
+                .map(|i| self.line_free.swap_remove(i))
+        } else { self.line_free.pop() };
+        free.unwrap_or_else(|| {
             self.grow_lines();
             self.line_alive.len() as u32 - 1
         })
@@ -1014,13 +1029,22 @@ impl Network {
     /// The ids the next `n` `alloc_line` calls would hand out, without taking them (T-3333: an edit
     /// planning new lines as ops).
     pub fn spare_line_ids(&self, n: usize) -> Vec<u32> {
-        let mut out: Vec<u32> = self.line_free.iter().rev().copied().take(n).collect();
+        let mut free = self.line_free.clone();
+        if self.cooperative_ids { free.sort_unstable_by(|a, b| b.cmp(a)); }
+        let mut out: Vec<u32> = free.iter().rev().copied().take(n).collect();
         let mut next = self.line_alive.len() as u32;
         while out.len() < n {
             out.push(next);
             next += 1;
         }
         out
+    }
+
+    pub fn enable_cooperative_ids(&mut self) {
+        self.cooperative_ids = true;
+        self.node_free = (0..self.node_count() as u32).filter(|&n| !self.node_ok(n)).collect();
+        self.edge_free = (0..self.edge_count() as u32).filter(|&e| !self.edge_ok(e)).collect();
+        self.line_free = (0..self.line_count() as u32).filter(|&l| !self.line_ok(l)).collect();
     }
 
     /// Give back ids handed out by `alloc_*` that no op claimed (a refused or trial edit).

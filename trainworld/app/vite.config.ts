@@ -247,6 +247,6 @@ export default defineConfig({
   build: { outDir: "dist", target: "es2022" },
   // T-682: the real-network layer reads noritetsu's tiles beside the game (map/realNetwork.ts); 8800 serves them
   // at /noritetsu/ and sends no CORS headers, so the dev server passes the path through
-  server: { proxy: { "/noritetsu": "http://localhost:8800", "/multiplayer": { target: "ws://127.0.0.1:8787", ws: true } } },
+  server: { proxy: { "/noritetsu": "http://localhost:8800", "/api": "http://127.0.0.1:8787", "/multiplayer": { target: "ws://127.0.0.1:8787", ws: true } } },
   plugins: [dataFallback(), packs()],
 });

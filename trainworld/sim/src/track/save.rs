@@ -1010,9 +1010,106 @@ fn fold_manual(net: &mut Network, l: u32) {
     let _ = net.set_line(l, Some(d));
 }
 
+/// Sidecar identity map for cooperative checkpoints; ordinary saves remain unchanged.
+pub fn cooperative_ids(net: &Network) -> Vec<u32> {
+    let mut out = vec![1, net.node_count() as u32, net.edge_count() as u32, net.line_count() as u32, net.buildings.len() as u32];
+    for ids in [
+        (0..net.node_count() as u32).filter(|&n| net.node_ok(n)).collect::<Vec<_>>(),
+        (0..net.edge_count() as u32).filter(|&e| net.edge_ok(e)).collect(),
+        (0..net.line_count() as u32).filter(|&l| net.line_ok(l)).collect(),
+        net.buildings.iter().enumerate().filter_map(|(i, b)| b.as_ref().map(|_| i as u32)).collect(),
+    ] { out.push(ids.len() as u32); out.extend(ids); }
+    out
+}
+
+pub fn restore_cooperative_ids(dense: Network, layout: &[u32]) -> Result<Network, String> {
+    if layout.len() < 9 || layout[0] != 1 || layout[1..5].iter().map(|&n| n as u64).sum::<u64>() > 1_000_000 {
+        return Err("invalid cooperative identity layout".into());
+    }
+    let mut at: usize = 5;
+    let mut lists = Vec::new();
+    for total in &layout[1..5] {
+        let n = *layout.get(at).ok_or("truncated identity layout")? as usize; at += 1;
+        let ids = layout.get(at..at.checked_add(n).ok_or("identity overflow")?).ok_or("truncated IDs")?;
+        if ids.iter().any(|id| id >= total) || ids.windows(2).any(|p| p[0] >= p[1]) { return Err("invalid identity order".into()); }
+        lists.push(ids); at += n;
+    }
+    if at != layout.len() || lists[0].len() != dense.node_count() || lists[1].len() != dense.edge_count()
+        || lists[2].len() != dense.line_count() || lists[3].len() != dense.buildings.len() { return Err("identity row count mismatch".into()); }
+    let (ns, es, ls, bs) = (lists[0], lists[1], lists[2], lists[3]);
+    let mut out = Network::new_in(dense.frame_kind, dense.origin_lon, dense.origin_lat, dense.right_hand);
+    for _ in 0..layout[1] { out.alloc_node(); }
+    for _ in 0..layout[2] { out.alloc_edge(); }
+    for _ in 0..layout[3] { out.alloc_line(); }
+    out.node_rank.resize(layout[1] as usize, 0);
+    out.line_rank.resize(layout[3] as usize, 0);
+    out.line_phase.resize(layout[3] as usize, [0.0; 3]);
+    out.line_split.resize(layout[3] as usize, [0.5; 3]);
+    out.line_pace.resize(layout[3] as usize, [0.0; 3]);
+    for (i, &id) in ns.iter().enumerate() {
+        out.set_node(id, dense.node_data(i as u32)).map_err(|e| format!("{e:?}"))?;
+        if let Some(st) = dense.station_data(i as u32) { out.set_station(id, Some(st)).map_err(|e| format!("{e:?}"))?; }
+        out.node_rank[id as usize] = dense.node_rank.get(i).copied().unwrap_or(0);
+    }
+    for (i, &id) in es.iter().enumerate() {
+        let mut e = dense.edge_data(i as u32).ok_or("missing edge")?;
+        e.a = *ns.get(e.a as usize).ok_or("edge node")?;
+        e.b = *ns.get(e.b as usize).ok_or("edge node")?;
+        out.set_edge(id, Some(e)).map_err(|e| format!("{e:?}"))?;
+    }
+    for (i, &id) in ls.iter().enumerate() {
+        let mut l = dense.line_data(i as u32).ok_or("missing line")?;
+        for n in &mut l.stops { *n = *ns.get(*n as usize).ok_or("line stop")?; }
+        for e in &mut l.path { *e = (*es.get((*e >> 1) as usize).ok_or("line edge")? << 1) | (*e & 1); }
+        if let Twin::Of(parent) = &mut l.twin { *parent = *ls.get(*parent as usize).ok_or("line twin")?; }
+        out.set_line(id, Some(l)).map_err(|e| format!("{e:?}"))?;
+        out.line_rank[id as usize] = dense.line_rank.get(i).copied().unwrap_or(0);
+        out.line_phase[id as usize] = dense.line_phase.get(i).copied().unwrap_or([0.0; 3]);
+        out.line_split[id as usize] = dense.line_split.get(i).copied().unwrap_or([0.5; 3]);
+        out.line_pace[id as usize] = dense.line_pace.get(i).copied().unwrap_or([0.0; 3]);
+    }
+    out.links = dense.links.iter().map(|p| [ns[p[0] as usize], ns[p[1] as usize]]).collect();
+    out.buildings.resize_with(layout[4] as usize, || None);
+    for (i, &id) in bs.iter().enumerate() { out.buildings[id as usize] = dense.buildings[i].clone(); }
+    out.rates_from_save = dense.rates_from_save;
+    out.pace_from_save = dense.pace_from_save;
+    out.phases_placed = dense.phases_placed;
+    out.settle_kept = dense.settle_kept.into_iter().map(|(l, a, b, c, d)| (ls[l as usize], a, b, c, d)).collect();
+    out.enable_cooperative_ids(); out.take_touch(); Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cooperative_checkpoint_preserves_sparse_ids_and_references() {
+        let dense = decode(&sample()).unwrap();
+        let layout = vec![1, 5, 3, 4, 0, 2, 1, 4, 1, 2, 1, 3, 0];
+        let mut back = restore_cooperative_ids(dense, &layout).unwrap();
+        assert!(back.node_ok(1) && back.node_ok(4) && !back.node_ok(0));
+        let e = back.edge_data(2).unwrap();
+        assert_eq!((e.a, e.b), (1, 4));
+        let l = back.line_data(3).unwrap();
+        assert_eq!(l.stops, vec![1, 4]);
+        assert!(l.path.iter().all(|e| e >> 1 == 2));
+        assert_eq!(cooperative_ids(&back), layout);
+        assert_eq!(back.alloc_node(), 0);
+        assert_eq!(back.alloc_edge(), 0);
+        assert_eq!(back.alloc_line(), 0);
+    }
+
+    #[test]
+    fn cooperative_ids_reject_duplicate_or_oversized_layouts() {
+        for layout in [vec![1, 5, 3, 4, 0, 2, 1, 1, 1, 2, 1, 3, 0], vec![1, 1_000_001, 0, 0, 0, 0, 0, 0, 0]] {
+            assert!(restore_cooperative_ids(decode(&sample()).unwrap(), &layout).is_err());
+        }
+        let mut a = decode(&sample()).unwrap(); a.enable_cooperative_ids();
+        let mut b = decode(&sample()).unwrap(); b.enable_cooperative_ids();
+        let first = a.alloc_node(); let second = a.alloc_node();
+        a.release_node(first); a.release_node(second);
+        assert_eq!(a.alloc_node(), b.alloc_node(), "a local preview must not change the next committed ID");
+    }
 
     /// A small network with a station, an edge and a line, in the world frame.
     fn sample() -> Vec<u8> {

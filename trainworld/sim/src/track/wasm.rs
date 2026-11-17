@@ -687,9 +687,15 @@ impl TrackApi {
     }
 
     /// Replace the network with a saved one. False if the bytes are not a save.
-    pub fn load(&mut self, bytes: &[u8]) -> bool {
+    pub fn load(&mut self, bytes: &[u8]) -> bool { self.load_with_ids(bytes, &[]) }
+
+    pub fn cooperative_ids(&self) -> Vec<u32> { save::cooperative_ids(&self.w.net) }
+    pub fn cooperative_enable(&mut self) { self.w.net.enable_cooperative_ids(); }
+
+    pub fn load_with_ids(&mut self, bytes: &[u8], ids: &[u32]) -> bool {
         let (bytes, eras) = split_eras(bytes);
-        match save::decode(bytes) {
+        let decoded = save::decode(bytes).and_then(|n| if ids.is_empty() { Ok(n) } else { save::restore_cooperative_ids(n, ids) });
+        match decoded {
             Ok(mut net) => {
                 // saves made from a real network before T-1442 carry its untidy names
                 super::names::tidy_network(&mut net);

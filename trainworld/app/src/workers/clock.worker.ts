@@ -1,3 +1,4 @@
+import type { CooperativeContext, CooperativeResult } from "./protocol";
 // The clock worker (SPEC 6.5, 7; T-025): owns the network (the track model's `TrackApi`, T-040),
 // applies edits, runs profiles and the capacity pass, and sends the main thread what it draws:
 // track polylines, keyframes (shared phase tables) and each game hour's trips (the hourly
@@ -773,7 +774,13 @@ function freezeCheckpoint(event: string, detail: unknown = null) {
   try { freezePort.postMessage({ event, detail, wasmMB: freezeMemory ? Math.round(freezeMemory.buffer.byteLength / 1048576) : undefined }); }
   catch { /* diagnostics must not affect the game */ }
 }
+let cooperativeCapture: { seq: number; answer?: CooperativeResult["answer"] } | null = null;
 function send(msg: FromClock, transfer: Transferable[] = []) {
+  if (msg.kind === "edited" && cooperativeCapture?.seq === msg.seq) {
+    const { ok, issues, charge, line, node, skipped } = msg;
+    cooperativeCapture.answer = { ok, issues, charge, line, node, skipped };
+    return;
+  }
   if (msg.kind === "edited") freezeCheckpoint("edited", { seq: msg.seq, ok: msg.ok, ms: msg.ms });
   if (msg.kind === "error") freezeCheckpoint("error", msg.message);
   postMessage(msg, { transfer });
@@ -810,10 +817,11 @@ const MAX_PANICS_PER_MINUTE = 3;
 const MAX_PANICS = 8;
 
 /** the network, cash and fleet after the last load or edit */
-type Kept = { net: Uint8Array; cash: number; fleet: number; fleetFast: number; fleetBus: number; fleetFerry: number; fleetTram: number };
+let cooperativeGame = false;
+type Kept = { ids?: Uint32Array; net: Uint8Array; cash: number; fleet: number; fleetFast: number; fleetBus: number; fleetFerry: number; fleetTram: number };
 let kept: Kept | null = null;
 function modelNow(a: TrackApi): Kept {
-  return { net: a.save(), cash: a.cash(), fleet: a.fleet(), fleetFast: a.fleet_fast(), fleetBus: a.fleet_bus(), fleetFerry: a.fleet_ferry(), fleetTram: a.fleet_tram() };
+  return { net: a.save(), ...(cooperativeGame ? { ids: a.cooperative_ids() } : {}), cash: a.cash(), fleet: a.fleet(), fleetFast: a.fleet_fast(), fleetBus: a.fleet_bus(), fleetFerry: a.fleet_ferry(), fleetTram: a.fleet_tram() };
 }
 function keep() {
   try {
@@ -892,7 +900,7 @@ async function rebuildModel(fromKept: boolean) {
   }
   if (!k) throw new Error("no network was kept");
   replaceModel();
-  await openNetwork(k.net);
+  await openNetwork(k.net, k.ids);
   api!.set_fleet(k.fleet);
   api!.set_fleet_fast(k.fleetFast);
   api!.set_fleet_bus(k.fleetBus);
@@ -1610,12 +1618,12 @@ async function masksBeforeLoad(net: Uint8Array) {
 }
 
 /** Put a network (in the world frame) in the track model, with the masks of the zones it meets. */
-async function openNetwork(net: Uint8Array) {
+async function openNetwork(net: Uint8Array, ids?: Uint32Array) {
   await worldWaterIntoModel();
   await terrainIndexIntoModel();
   await masksBeforeLoad(net);
-  if (!api!.load(net)) throw new Error("This save is damaged.");
-  await masksForLoaded(net);
+  if (!(ids ? api!.load_with_ids(net, ids) : api!.load(net))) throw new Error("This save is damaged.");
+  await masksForLoaded(net, ids);
   await terrainForLoaded();
   // T-1929: the roads under the blueprint, so its quote has them before Construct waits for them
   void roadsUnder(...blueprintPolylines());
@@ -1623,7 +1631,7 @@ async function openNetwork(net: Uint8Array) {
 
 /** After a network is loaded: the masks of every zone its track meets, then the network opened again
  * over them if any was missing (each mask installed on a loaded network would rework all of it). */
-async function masksForLoaded(net: Uint8Array) {
+async function masksForLoaded(net: Uint8Array, ids?: Uint32Array) {
   const a = api!;
   syncFrame();
   const xy: number[] = [];
@@ -1646,7 +1654,7 @@ async function masksForLoaded(net: Uint8Array) {
   if (!missing.length) return;
   a.load(emptyTrack!);
   await ensureMasks(missing);
-  if (!a.load(net)) throw new Error("This save is damaged.");
+  if (!(ids ? a.load_with_ids(net, ids) : a.load(net))) throw new Error("This save is damaged.");
 }
 
 // ---------------------------------------------------------------- state for the main thread
@@ -2733,7 +2741,7 @@ let loadingInto: string | null = null;
  * format. Money, fares and the ledger load as saved, but for anything settled after the clock
  * (`unsettleAfter`). With `fresh`, the save is a real network a new game starts from (T-731): only
  * its network and fleet are kept, the rest is a new game's (fares too, T-1906). */
-async function loadGame(bytes: Uint8Array, from: "autosave" | "file" | "new", fresh?: NewGameSpec): Promise<boolean> {
+async function loadGame(bytes: Uint8Array, from: "autosave" | "file" | "new", fresh?: NewGameSpec, ids?: Uint32Array): Promise<boolean> {
   todayGen++;
   todayLast = null;
   const decoded = await decodeSave(bytes);
@@ -2759,7 +2767,7 @@ async function loadGame(bytes: Uint8Array, from: "autosave" | "file" | "new", fr
   // T-1539: the demand result kept for this save's network can show while the network is worked out
   // (China's 17-42 s); awaited here, since the load below holds the worker
   if (st.length > 3) await saveNetKey(net, h).then((key) => send({ kind: "netAhead", key }), () => {});
-  await openNetwork(net);
+  await openNetwork(net, ids);
   // T-3297: a real network started on the other side than its save keeps to
   if (fresh?.rightHand !== undefined && fresh.rightHand !== api!.right_hand()) api!.flip_right_hand();
   api!.set_fleet(h.fleet ?? 0);
@@ -4071,13 +4079,67 @@ onmessage = (e: MessageEvent<ToClock>) => {
   if (isPreview(msg)) previewAt = performance.now();
   messages = messages.then(() => processMessage(msg)).then(pumpBlocks).catch(err => send({ kind: "error", message: String(err) }));
 };
+function cooperativeContext(): CooperativeContext {
+  const { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions } = header();
+  return { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions, rate: clk.rate };
+}
+function takeCooperativeContext(c: CooperativeContext) {
+  clk = { t: c.clock, rate: c.rate, at: wallNow() };
+  settledT = c.clock;
+  partHour = Math.floor(c.clock / 3600);
+  partFare = partCost = (c.clock - partHour * 3600) / 3600;
+  api!.set_cash(c.cash);
+  api!.set_fleet(c.fleet ?? 0); api!.set_fleet_fast(c.fleetFast ?? 0);
+  api!.set_fleet_bus(c.fleetBus ?? 0); api!.set_fleet_ferry(c.fleetFerry ?? 0); api!.set_fleet_tram(c.fleetTram ?? 0);
+  loan = loanFromSave(c);
+  fares = loadFares(c.fares);
+  ledger = mergeLedger(c.ledger, d => d.day);
+  hourLedger = mergeLedger(c.hours, d => d.hour);
+  loadRegions(c.regions);
+}
+
 async function processMessage(msg: ToClock) {
+  if (msg.kind === "coopRead" || msg.kind === "coopTime" || msg.kind === "coopExport" || msg.kind === "coopCommand") {
+    await ready;
+    if (followUp) await guardedFollowUp();
+    if (!api || modelDown) {
+      if (msg.kind === "coopCommand") send({ kind: "coopResult", seq: msg.seq, error: "Model unavailable" });
+      return;
+    }
+    if (msg.kind === "coopTime") { takeCooperativeContext(msg.context); sendMoney(); return; }
+    settle();
+    if (msg.kind === "coopRead") { send({ kind: "coopContext", seq: msg.seq, context: cooperativeContext() }); return; }
+    if (msg.kind === "coopExport") {
+      cooperativeGame = true;
+      api.cooperative_enable();
+      const ids = api.cooperative_ids(), bytes = await saveBytes();
+      send({ kind: "coopExported", seq: msg.seq, ids, bytes }); return;
+    }
+    const rate = msg.context?.rate ?? clk.rate;
+    if (msg.context) takeCooperativeContext(msg.context);
+    const before = cooperativeContext();
+    clk = { t: before.clock, rate: 0, at: wallNow() };
+    settledT = before.clock;
+    cooperativeCapture = { seq: msg.seq };
+    try {
+      await processMessage({ kind: "edit", seq: msg.seq, op: msg.op });
+      if (followUp) await guardedFollowUp();
+      const answer = cooperativeCapture.answer;
+      if (!answer) throw new Error("Edit returned no answer");
+      clk = { t: before.clock, rate, at: wallNow() };
+      send({ kind: "coopResult", seq: msg.seq, result: { answer, before, after: cooperativeContext() } });
+    } catch (error) { send({ kind: "coopResult", seq: msg.seq, error: String(error) }); }
+    finally { cooperativeCapture = null; }
+    return;
+  }
   if (msg.kind === "coopSnapshot") {
+    cooperativeGame = true;
     await ready;
     if (followUp) await guardedFollowUp();
     try {
-      if (msg.first) await intoView(msg.name, () => loadGame(msg.bytes, "file"));
-      else await loadGame(msg.bytes, "file");
+      if (msg.first) await intoView(msg.name, () => loadGame(msg.bytes, "file", undefined, msg.ids));
+      else await loadGame(msg.bytes, "file", undefined, msg.ids);
+      api!.cooperative_enable();
       trackVersion++;
       dirty = edited = false;
       send({ kind: "coopApplied" });

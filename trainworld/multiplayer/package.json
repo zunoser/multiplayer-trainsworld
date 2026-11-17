@@ -2,7 +2,16 @@
   "name": "trainsworld-multiplayer",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
-  "scripts": { "start": "node server.mjs", "test": "node --test server.test.mjs" },
-  "dependencies": { "ws": "^8.18.3" }
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node dev.mjs",
+    "start": "node dev.mjs",
+    "test": "node --test worker.test.mjs"
+  },
+  "devDependencies": {
+    "cf": "^1.0.0-rc.0",
+    "miniflare": "^4.20260730.0"
+  }
 }

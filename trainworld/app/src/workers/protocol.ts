@@ -12,7 +12,7 @@ import type { BuildingInput, EdgeId, Level, NodeId } from "../game/types";
 import type { FrameSpec } from "../game/frame";
 import type { LineShape } from "../game/lineShape";
 import type { Loan } from "../game/loan";
-import type { Achieved, DayLedger, GameMode, GuideSave, HourLedger, NewGameSpec, PendingLoad, SaveSlot, SlotBackup } from "./saveFile";
+import type { Achieved, DayLedger, GameMode, GuideSave, HourLedger, NewGameSpec, PendingLoad, SaveSlot, SlotBackup, SaveHeader } from "./saveFile";
 import type { NetworkBuffers } from "../map/network";
 import type { CloudContext } from "./cloud";
 import type { DiagramGraph } from "../diagram/graph";
@@ -196,6 +196,10 @@ export type EditOp =
   | { op: "undo" }
   | { op: "redo" };
 
+export type CooperativeContext = Pick<SaveHeader, "clock" | "cash" | "loan" | "loanPay" | "loanDays" | "fleet" | "fleetFast" | "fleetBus" | "fleetFerry" | "fleetTram" | "fares" | "ledger" | "hours" | "regions"> & { rate: number };
+export type CooperativeAnswer = { ok: boolean; issues: string[]; charge: number; line?: number; node?: number; skipped?: number };
+export type CooperativeResult = { answer: CooperativeAnswer; before: CooperativeContext; after: CooperativeContext };
+
 export type ToClock =
   | { kind: "freezeTrace"; port: MessagePort }
   /** `pack`: the city pack's URL without extension (".../packs/nyc"), absolute. `fresh`: start a
@@ -316,7 +320,11 @@ export type ToClock =
    * (T-743): no slot is ever written over with another game */
   | { kind: "import"; bytes: ArrayBuffer; name?: string }
   /** Checked cooperative checkpoint, in a transient view that cannot overwrite a local game. */
-  | { kind: "coopSnapshot"; bytes: Uint8Array; first: boolean; name: string }
+  | { kind: "coopSnapshot"; bytes: Uint8Array; first: boolean; name: string; ids?: Uint32Array }
+  | { kind: "coopCommand"; seq: number; op: EditOp; context?: CooperativeContext }
+  | { kind: "coopRead"; seq: number }
+  | { kind: "coopTime"; context: CooperativeContext }
+  | { kind: "coopExport"; seq: number }
   /** start again: empty city (or `game.real`'s network), `START_CASH`, day 1 07:00; answered with "loaded" */
   | { kind: "newGame"; name?: string; game?: NewGameSpec }
   /** T-728: make this normal game a sandbox, for good */
@@ -838,6 +846,9 @@ export type FromClock =
   /** T-2395: the home of the game in hand (`SaveHeader.home`), sent with "opened" */
   | { kind: "home"; home: string | null }
   /** the save file, for the player to keep */
+  | { kind: "coopResult"; seq: number; result?: CooperativeResult; error?: string }
+  | { kind: "coopContext"; seq: number; context: CooperativeContext }
+  | { kind: "coopExported"; seq: number; bytes: Uint8Array; ids: Uint32Array }
   | { kind: "coopApplied"; error?: string }
   | { kind: "exported"; bytes: Uint8Array; day: number; share?: true }
   /** a station placement's check (T-311): `issues` as an edit's; `cost` what it adds to the

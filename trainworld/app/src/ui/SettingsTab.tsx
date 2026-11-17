@@ -202,7 +202,6 @@ export function SettingsTab() {
         )}
       </div>
       <MemoryRow />
-      <GameMode />
       <div class="h">{t("settingsTab.lineShapes")}</div>
       <div class="shape-grid">
         {SHAPE_MODES.map((m) => (
@@ -215,10 +214,6 @@ export function SettingsTab() {
       <AccountSection />
       <FeedbackButton />
       <FeedbackPanel />
-      <div class="donate">
-        <a class="btn icon" href="https://ko-fi.com/anitamaps" target="_blank" rel="noopener" data-tip={t("settingsTab.donateTip")} aria-label={t("settingsTab.kofi")}><Icon.kofi /></a>
-        <span class="muted" data-tip={t("settingsTab.donateTip")}>{t("settingsTab.donate")}</span>
-      </div>
       <Credits />
     </>
   );

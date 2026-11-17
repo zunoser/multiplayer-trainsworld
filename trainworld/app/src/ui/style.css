@@ -1985,3 +1985,45 @@ html.ui-hidden .ui-hint.on { display: block; }
 .coop-members li { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; }
 .coop-members li span { min-width: 0; overflow-wrap: anywhere; }
 .coop p { margin: 8px 0; overflow-wrap: anywhere; }
+
+.shared-cursors { position: absolute; inset: 0; z-index: 24; pointer-events: none; overflow: hidden; }
+.shared-cursor { position: absolute; top: 0; left: 0; transition: transform 100ms linear; color: var(--cursor-color); }
+.shared-cursor svg { width: 20px; height: 26px; fill: var(--cursor-color); stroke: var(--bg); stroke-width: 1.5px; }
+.shared-cursor-name { position: absolute; top: 23px; left: 14px; padding: 2px 6px; border-radius: 3px; color: white; background: var(--cursor-color); white-space: nowrap; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.cursor-chat-bubble { position: absolute; top: 0; left: 24px; max-width: 240px; width: max-content; padding: 6px 9px; border: 1px solid var(--cursor-color, var(--accent)); border-radius: 5px; background: var(--bg); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.cursor-chat-input, .cursor-chat-own { position: absolute; top: 0; left: 0; }
+.cursor-chat-input { pointer-events: auto; width: 215px; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 4px; padding: 7px; font: inherit; }
+.shared-cursors [hidden] { display: none !important; }
+
+.multiplayer-lobby { position: fixed; inset: 0; z-index: 10000; overflow-y: auto; color: var(--text); background: radial-gradient(ellipse at 18% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%), var(--bg); }
+.lobby-shell { max-width: 680px; margin: 0 auto; padding: 44px 24px 24px; }
+.lobby-brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+.lobby-brand-sub { display: block; margin-top: -2px; font-size: 12px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; }
+.lobby-logo { display: grid; place-items: center; width: 44px; height: 44px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--bg)); border-radius: 12px; }
+.lobby-logo svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.lobby-private { margin-left: auto; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--text) 16%, var(--bg)); border-radius: 999px; font-size: 12px; font-weight: 400; }
+.lobby-intro { margin: 42px 0 24px; }
+.lobby-kicker { font-size: 12px; letter-spacing: 2px; color: var(--accent); font-weight: 700; }
+.lobby-intro h1 { font-size: clamp(25px, 4vw, 36px); margin: 10px 0; line-height: 1.45; font-weight: 700; }
+.lobby-intro p { margin: 0; max-width: 600px; line-height: 1.9; color: color-mix(in srgb, var(--text) 72%, var(--bg)); }
+.lobby-card { border: 1px solid color-mix(in srgb, var(--text) 15%, var(--bg)); border-radius: 15px; background: color-mix(in srgb, var(--bg) 96%, white); overflow: hidden; box-shadow: 0 16px 55px color-mix(in srgb, var(--text) 5%, transparent); }
+.lobby-modes { display: grid; grid-template-columns: 1fr 1fr; padding: 8px; gap: 8px; border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, var(--bg)); }
+.lobby-modes button { appearance: none; border: 1px solid transparent; background: transparent; color: var(--text); text-align: left; border-radius: 10px; padding: 16px; font: inherit; cursor: pointer; }
+.lobby-modes button.selected { border-color: color-mix(in srgb, var(--accent) 60%, var(--bg)); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.lobby-modes svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; display: block; margin-bottom: 9px; color: var(--accent); }
+.lobby-modes strong { display: block; font-size: 14px; }.lobby-modes span { display: block; margin-top: 5px; font-size: 12px; opacity: .7; }
+.lobby-form { padding: 24px; display: grid; gap: 18px; }.lobby-form label { display: grid; gap: 8px; font-size: 14px; font-weight: 700; }
+.lobby-form input { box-sizing: border-box; width: 100%; min-width: 0; padding: 12px 13px; border: 1px solid color-mix(in srgb, var(--text) 22%, var(--bg)); border-radius: 7px; background: var(--bg); color: var(--text); font: inherit; font-weight: 400; }
+.lobby-form input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 2px; border-color: var(--accent); }
+.lobby-code { letter-spacing: 2px; }.lobby-submit { display: flex; justify-content: space-between; align-items: center; appearance: none; border: 0; border-radius: 7px; padding: 14px 16px; font: inherit; font-weight: 700; cursor: pointer; background: var(--text); color: var(--bg); }
+.lobby-submit:disabled { opacity: .55; cursor: wait; }.lobby-submit span { font-size: 20px; }.lobby-form-note { margin: 0; font-size: 12px; line-height: 1.8; opacity: .7; }.lobby-authenticated { color: #287149; font-size: 12px; }.lobby-error { margin: 0; color: var(--bad); font-size: 14px; }
+.lobby-features { display: flex; justify-content: center; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 22px 0; font-size: 12px; opacity: .8; }.lobby-features span { display: flex; align-items: center; gap: 5px; }.lobby-features svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }.lobby-features .lobby-slash { border: 1px solid currentColor; border-radius: 3px; padding: 0 5px; margin-right: -12px; }
+.lobby-shell footer { display: flex; justify-content: center; gap: 12px; font-size: 12px; opacity: .7; }.lobby-shell footer a { color: inherit; }
+.room-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; color: var(--text); background: var(--bg); border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, var(--bg)); font-size: 12px; }
+.room-status { display: flex; align-items: center; gap: 5px; white-space: nowrap; }.room-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }.room-status.online i { background: #287149; }
+.room-code-box { display: flex; align-items: center; gap: 7px; }.room-code-value { display: flex; align-items: center; gap: 7px; padding: 4px 7px; color: var(--text); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--bg)); border-radius: 4px; font: inherit; letter-spacing: 1px; cursor: pointer; }.room-code-value svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.3; }
+.room-members { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; min-width: 50px; }.room-member { display: flex; align-items: center; gap: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.room-member i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.room-bar .btn svg { width: 14px; height: 14px; }.room-chat-hint { display: flex; gap: 5px; align-items: center; white-space: nowrap; }.room-chat-hint kbd { padding: 0 4px; border: 1px solid color-mix(in srgb,var(--text) 20%,var(--bg)); border-radius: 3px; }
+@media (max-width: 600px) { .lobby-shell { padding: 25px 16px; }.lobby-intro { margin-top: 30px; }.lobby-form { padding: 18px; }.lobby-modes button { padding: 12px; }.lobby-modes span { line-height: 1.6; }.lobby-features { gap: 8px 12px; }.room-bar { gap: 6px 8px; }.room-chat-hint { display: none; }.room-members { flex-basis: 100%; order: 2; }.room-status { display: none; } }
+
+#multiplayer-lobby-root { position: fixed; inset: 0; z-index: 10000; }

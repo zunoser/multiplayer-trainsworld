@@ -32,8 +32,8 @@ again when anything in `trainworld/sim/` changes. `npm run check` type-checks th
 
 ## Cooperative multiplayer
 
-This working branch adds rooms for up to eight players to build one world together, passing building control
-between participants. See [multiplayer setup and limitations](trainworld/multiplayer/README.md).
+This fork adds password-protected rooms for up to five players to build one world together in real time,
+using Cloudflare Workers and SQLite Durable Objects. See [multiplayer setup and limitations](trainworld/multiplayer/README.md).
 
 ## Data
 

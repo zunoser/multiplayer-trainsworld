@@ -1,3 +1,5 @@
+import { RoomBar } from "./RoomBar";
+import { cooperative, cooperativeAuthority } from "../game/multiplayerGate";
 // Top bar: city (or the world, zoomed far out), the mode split (the goal number: the bar and the
 // train share), cash, the time and date on one line (T-1853), speed and pause. The clock is its own
 // component so a game minute re-renders only it. The sky and demand band are `MapSky`, on the map.
@@ -201,6 +203,7 @@ const times = (x: number) =>
 /** T-1664: double-click the fastest button for a slider of speeds, real to 100x (the third button always
  * shows its speed as text); T-1665: while demand updates the clock is held at DEMAND_CAP, the chosen speed dimmed. */
 function Speed() {
+  const locked = cooperative.value && !cooperativeAuthority.value;
   const running = clock.running.value;
   const speed = clock.speed.value;
   const custom = clock.custom.value;
@@ -221,7 +224,7 @@ function Speed() {
   const btn = (i: number, icon: ComponentChildren, title: string, extra: Record<string, unknown> = {}) => {
     const on = running && (custom !== null ? 2 : speed) === i;
     return (
-      <button class={"btn icon" + (on ? " on" : "") + (on && held ? " held" : "") + (i === 2 ? " rate" : "")} data-tip={on ? heldTip(title) : title} aria-label={title} onClick={() => (i === 2 && custom !== null ? clock.setMultiple(custom) : clock.setSpeed(i))} {...extra}>
+      <button disabled={locked} class={"btn icon" + (on ? " on" : "") + (on && held ? " held" : "") + (i === 2 ? " rate" : "")} data-tip={on ? heldTip(title) : title} aria-label={title} onClick={() => (i === 2 && custom !== null ? clock.setMultiple(custom) : clock.setSpeed(i))} {...extra}>
         {i === 2 ? times(custom ?? SPEEDS[2] / SPEEDS[0]) : icon}
       </button>
     );
@@ -229,7 +232,7 @@ function Speed() {
   const stop = Math.max(0, SLIDER_STOPS.findIndex((s) => s >= chosen - 1e-9));
   return (
     <div class="group speed" ref={box}>
-      <button class={"btn icon" + (!running ? " on" : "")} data-tip={t("topBar.pauseTip")} aria-label={t("topBar.pause")} onClick={() => clock.setRunning(!running)}>
+      <button disabled={locked} class={"btn icon" + (!running ? " on" : "")} data-tip={t("topBar.pauseTip")} aria-label={t("topBar.pause")} onClick={() => clock.setRunning(!running)}>
         <Icon.pause />
       </button>
       {btn(0, <Icon.play1 />, t("topBar.normalSpeed"), { "data-guide": "play" })}
@@ -237,7 +240,7 @@ function Speed() {
       {btn(2, null,t("topBar.speedPick", { speed: times(custom ?? SPEEDS[2] / SPEEDS[0]) }), { onDblClick: () => setOpen((o) => !o) })}
       {open && (
         <div class="slider speed-pop">
-          <input type="range" min={0} max={SLIDER_STOPS.length - 1} step={1} value={stop} aria-label={t("topBar.clockSpeed")}
+          <input disabled={locked} type="range" min={0} max={SLIDER_STOPS.length - 1} step={1} value={stop} aria-label={t("topBar.clockSpeed")}
             onInput={(e) => clock.setMultiple(SLIDER_STOPS[Number((e.target as HTMLInputElement).value)])} />
           <span class="num">{times(chosen)}</span>
         </div>
@@ -264,6 +267,7 @@ function worldShareTip(tot: ReturnType<typeof worldTotals>, day: string, note: s
 const joinWhere = (place: string, day: string) => tSpaced(place && day ? t("topBar.placeDay", { place, day }) : place || day);
 
 function SaveNotice() {
+  if (cooperative.value) return null;
   const state = saveSlotsState.value;
   if (state.writable) return null;
   // T-3257: a network viewed from Community is kept nowhere until saved
@@ -304,7 +308,7 @@ export function TopBar() {
   const note = demandView.value && (viewRecomputing.value || demandView.value.version === CACHE_VERSION) ? tSpaced(t("topBar.recomputing")) : "";
   const worldTip = total ? t("topBar.worldTip", { cities: total.cities, stations: total.stations }) : undefined;
   return (
-    <><header id="topbar">
+    <><RoomBar /><header id="topbar">
       {/* T-1108: the name takes what it needs up to a cap, on two lines at most, the whole name on hover */}
       {far ? <CityName id={null} name={t("topBar.world")} tip={worldTip} /> : <CityName id={city?.id ?? null} name={cityName} />}
       <div class="split">
