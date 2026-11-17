@@ -4,7 +4,7 @@ export default defineConfig({
   defaultPackage: { dev: "trainworld/app", build: "trainworld/app", preview: "trainworld/app" },
   // Keep the established source layout; CI formats the toolchain files explicitly.
   check: { fmt: false },
-  fmt: {},
+  fmt: { endOfLine: "lf" },
   lint: {
     ignorePatterns: ["trainworld/tools/**", "trainworld/data/**", "**/dist/**", "**/src/wasm/**"],
     jsPlugins: [

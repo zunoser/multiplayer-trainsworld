@@ -12,7 +12,7 @@ The workflow has three stages:
 
 setup-vp caches Bun downloads and the pinned Vite+/Node/package-manager toolchain. A separate OS/toolchain/Cargo.lock cache covers Cargo dependencies, Rust targets and the pinned wasm-pack binary. Actions are pinned to commit SHAs. Pull requests cannot start the production job; workflow_dispatch on main can re-run the same pipeline.
 
-vp check covers the app and toolchain configuration with lint and type checks. The legacy source has existing lint warnings, so CI gates errors and uses --quiet. Formatting is checked on the toolchain files and migrated tests; this migration does not reformat the entire game.
+vp check covers the app and toolchain configuration with lint and type checks. The legacy source has existing lint warnings, so CI gates errors and uses --quiet. Formatting is checked on the toolchain files and migrated tests; .gitattributes and the formatter fix those files to LF on both platforms. This migration does not reformat the entire game.
 
 The production smoke check retries the complete HTML, asset and health check every two seconds, up to 31 attempts, so a transient asset 404 immediately after upload can settle. Persistent missing assets and incorrect MIME types still fail the run.
 
