@@ -1,3 +1,4 @@
+import { competing, myCompany, myCompanyId, ownsAsset } from "../game/companies";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { lowerWord, t, tNumber, tSeries, type MessageKey } from "../i18n";
 import { describeIssues } from "../game/issues";
@@ -141,27 +142,31 @@ function rowTip(r: BlueprintItem) {
 export function BlueprintControls() {
   const w = world.value;
   const items = useBlueprintQuote();
-  const total = items.reduce((sum, r) => sum + r.cost, 0);
+  const company = myCompany.value;
+  const companyId = myCompanyId.value;
+  const version = w?.version ?? -1;
+  const quote = useLatestAnswer(companyId ? () => queryClock({ what: "companyQuote", company: companyId }) : null, [version, companyId, company?.fleet.join()]);
+  const total = competing.value ? (quote?.length === 2 ? (quote[0] + quote[1]) * 1e6 : 0) : items.reduce((sum, r) => sum + r.cost, 0);
   const m = moneyState.value;
   // T-867: what the blueprint will cost a day once constructed, the pieces switched off left out
   let upkeep = 0;
   if (w && m && total > 0) {
-    for (const e of w.edges) if (!e.built && !e.off) upkeep += edgeUpkeep({ ...e, built: true }, m);
+    for (const e of w.edges) if (!e.built && !e.off && ownsAsset("edge", e.id)) upkeep += edgeUpkeep({ ...e, built: true }, m);
     // T-2194: a port's upkeep is its own, a fifth of a station's
-    for (const s of w.save.stations) if (!s.built && !s.off) upkeep += s.port ? m.upkeepPort * m.economy : stationUpkeepOf(m, s);
-    for (const st of Object.values(w.lineStats)) if (st.bus && !st.bus.built && !st.bus.ferry) upkeep += (st.bus.roadM / 1000) * m.upkeepBusKm * m.economy;
+    for (const s of w.save.stations) if (!s.built && !s.off && ownsAsset("node", s.num)) upkeep += s.port ? m.upkeepPort * m.economy : stationUpkeepOf(m, s);
+    for (const [id, st] of Object.entries(w.lineStats)) if (ownsAsset("line", w.save.lines.find(l => l.id === id)?.num) && st.bus && !st.bus.built && !st.bus.ferry) upkeep += (st.bus.roadM / 1000) * m.upkeepBusKm * m.economy;
   }
   return (
     <div class="blueprint-controls">
       <div class="blueprint-head">
         <span class="b">{t("blueprint.title")}</span>
         <span class="bp-total">
-          <b class={"num" + (m?.mode !== "sandbox" && total > liveMoney.value.cash * 1e6 ? " bad" : "")} data-tip={t("blueprint.totalTip")}>{money(total)}</b>
-          <OffCost items={items} />
+          <b class={"num" + (m?.mode !== "sandbox" && total > (company?.cash ?? liveMoney.value.cash) * 1e6 ? " bad" : "")} data-tip={t("blueprint.totalTip")}>{money(total)}</b>
+          {!competing.value && <OffCost items={items} />}
         </span>
         <div class="group">
-          <button class="btn icon" data-tip={t("blueprint.undoTip")} aria-label={t("blueprint.undo")} disabled={!w?.canUndo} onClick={() => void undo()}><Icon.undo /></button>
-          <button class="btn icon" data-tip={t("blueprint.redoTip")} aria-label={t("blueprint.redo")} disabled={!w?.canRedo} onClick={() => void redo()}><Icon.redo /></button>
+          <button class="btn icon" data-tip={t("blueprint.undoTip")} aria-label={t("blueprint.undo")} disabled={competing.value || !w?.canUndo} onClick={() => void undo()}><Icon.undo /></button>
+          <button class="btn icon" data-tip={t("blueprint.redoTip")} aria-label={t("blueprint.redo")} disabled={competing.value || !w?.canRedo} onClick={() => void redo()}><Icon.redo /></button>
         </div>
       </div>
       {m && upkeep > 0 && (
@@ -169,8 +174,8 @@ export function BlueprintControls() {
           {t("blueprint.upkeepDay", { money: money(upkeep) })}
         </p>
       )}
-      <BlueprintBreakdown items={items} />
-      <button class="btn text blueprint-construct" data-guide="construct" data-tip={t("blueprint.constructTip", { key: "C" })} disabled={total <= 0} onClick={() => void constructBlueprints()}>{t("blueprint.construct")}<span class="key muted">C</span></button>
+      {!competing.value && <BlueprintBreakdown items={items} />}
+      <button class="btn text blueprint-construct" data-guide="construct" data-tip={t("blueprint.constructTip", { key: "C" })} disabled={total <= 0 || (competing.value && total > (company?.cash ?? 0) * 1e6)} onClick={() => void constructBlueprints()}>{t("blueprint.construct")}<span class="key muted">C</span></button>
     </div>
   );
 }

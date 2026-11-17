@@ -1,3 +1,4 @@
+import { competing } from "../../game/companies";
 // The station inspector (SPEC 8): a station on its own, or its complex.
 
 import { useEffect, useState } from "preact/hooks";
@@ -315,7 +316,7 @@ function StationLinks({ id, members }: { id: string; members: string[] }) {
 /** T-2218: the station building the complex belongs to: its name, floor, Edit outline and Remove building. */
 function StationBuilding({ id, members }: { id: string; members: string[] }) {
   const b = buildingOf(members);
-  if (!b) return null;
+  if (competing.value || !b) return null;
   const n = b.corners.length / 2;
   let my = 0;
   for (let i = 0; i < n; i++) my += b.corners[2 * i + 1] / n;

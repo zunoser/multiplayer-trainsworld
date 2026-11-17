@@ -1,3 +1,4 @@
+import { companies, competing, ownsAsset } from "../../game/companies";
 // The inspector shows whatever is selected, and is blank when nothing is (SPEC 8).
 
 import { selection } from "../../game/ui";
@@ -14,7 +15,7 @@ import { StationInspector } from "./StationInspector";
 import { TrackInspector } from "./TrackInspector";
 import { TrainInspector } from "./TrainInspector";
 import { effect } from "@preact/signals";
-import { world } from "../../game/world";
+import { linesById, stationsById, world } from "../../game/world";
 
 // T-3333: a hidden twin's line picked (its train's chip, its track) is shown as the line it runs for
 effect(() => {
@@ -38,5 +39,18 @@ export function Inspector() {
   else if (s.kind === "world") body = <AllCitiesView />;
   else if (s.kind === "achievements") body = <AchievementsView />;
   else body = <TripInspector />;
-  return <section id="inspector">{body}</section>;
+  const w = world.value;
+  const locked = competing.value && !!s && (
+    s.kind === "group" ||
+    ((s.kind === "line" || s.kind === "train") && !ownsAsset("line", w ? linesById(w).get(s.line)?.num : undefined)) ||
+    (s.kind === "station" && !ownsAsset("node", w ? stationsById(w).get(s.station)?.num : undefined)) ||
+    (s.kind === "track" && !ownsAsset("edge", s.edge)) ||
+    (s.kind === "junction" && !ownsAsset("node", s.node)) ||
+    (s.kind === "busStop" && s.lines.some(id => !ownsAsset("line", w ? linesById(w).get(id)?.num : undefined)))
+  );
+  const key = !s || !w ? null : s.kind === "line" || s.kind === "train" ? "line:" + linesById(w).get(s.line)?.num :
+    s.kind === "station" ? "node:" + stationsById(w).get(s.station)?.num :
+    s.kind === "track" ? "edge:" + s.edge : s.kind === "junction" ? "node:" + s.node : null;
+  const game = companies.value, owner = key && game?.companies.find(c => c.id === game.owners[key]);
+  return <section id="inspector">{owner&&<div class="small muted">{owner.name}</div>}{locked ? <fieldset disabled style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} onDblClickCapture={e => e.stopPropagation()}>{body}</fieldset> : body}</section>;
 }

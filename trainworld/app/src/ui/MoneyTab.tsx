@@ -1,3 +1,5 @@
+import { companies } from "../game/companies";
+import { CompanyTable } from "./CompanyTable";
 // The Money tab: cash, the ledger, the fare curve and the fleet.
 
 import { boatRunRule, boatsText, busesText, busRouteRule, busRunRule, currencySpec, fromShown, money, moneyCash, price, priceTyped, runCostHere, runCostLine, runCostRule, toShown, upkeepLines } from "../game/format";
@@ -211,6 +213,7 @@ function FareEffect({ preview, scale }: { preview: FareNode[] | null; scale: num
 }
 
 export function MoneyTab() {
+  if(companies.value)return <CompanyTable />;
   const w = world.value;
   const m = moneyState.value;
   if (!w || !m) return null;

@@ -1,3 +1,4 @@
+import { competing, myCompanyId } from "./companies";
 import { t } from "../i18n";
 import { edit, lineById, say, stationsById, world } from "./world";
 import { closeNetworkView, lineDraft, newLine, renameLinePrompt, selection, tool } from "./ui";
@@ -7,6 +8,7 @@ import { ferryDraft } from "../map/ferryDraw";
 import { money } from "./format";
 import { viewedZone, type CityId } from "./cities";
 import { stationZone } from "./listScope";
+import { queryClock } from "../workers/clockClient";
 import { blueprintQuote } from "./quotes";
 import { pickColour } from "./colourPick";
 import { rememberPicked, settleNewLineColour } from "./lineColour";
@@ -143,6 +145,7 @@ export function editBusRoute(l: Pick<LineInput, "id" | "num" | "colour">) {
 /** T-2194: draw a new ferry line (the O key, the Lines tab's ferry button, the Build tab's Ferry tool):
  * place ports, then finish (map/ferryDraw.ts). */
 export function newFerryLine() {
+  if (competing.peek()) return;
   const t = live.tools;
   if (!t || !world.peek()) return;
   t.exit();
@@ -152,6 +155,7 @@ export function newFerryLine() {
 
 /** T-2194: the ferry line's Edit route button, as the bus line's. */
 export function editFerryRoute(l: Pick<LineInput, "id" | "num" | "colour">) {
+  if (competing.peek()) return;
   const t = live.tools, ferry = world.peek()?.lineStats[l.id]?.bus?.ferry;
   if (!t || !ferry) return;
   if (tool.peek() === "ferry" && ferryDraft.peek()?.line === l.num) return void t.ferry.finish();
@@ -194,8 +198,14 @@ export async function addAllPassedSelected() {
 /** Construct every blueprint piece (the Build tab's button and the C key); nothing to build does nothing. */
 export async function constructBlueprints() {
   const w = world.peek();
-  const items = w ? await blueprintQuote(w.version, true) : null;
-  if (!items?.some((r) => r.cost > 0)) return;
+  if (competing.peek()) {
+    const company = myCompanyId.peek();
+    const q = company ? await queryClock({ what: "companyQuote", company }) : null;
+    if (!q?.some(n => n > 0)) return;
+  } else {
+    const items = w ? await blueprintQuote(w.version, true) : null;
+    if (!items?.some(r => r.cost > 0)) return;
+  }
   const a = await edit({ op: "constructAll" });
   if (a.ok) say(t("lineActions.constructed", { cost: money(a.charge * 1e6) }));
 }

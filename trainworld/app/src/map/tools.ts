@@ -22,6 +22,7 @@
 // Everything drawn is blueprint until constructed (SPEC 6.4).
 
 import { t as tr, tNumber } from "../i18n";
+import { ownsAsset } from "../game/companies";
 import { mobileDevice } from "../workers/deviceMemory";
 import { effect } from "@preact/signals";
 import type { Map as MlMap, MapMouseEvent } from "maplibre-gl";
@@ -400,6 +401,7 @@ export class Tools {
     const n = this.overlay.renderer.net;
     const [fx, fy] = toLocal(lngLat.lng, lngLat.lat);
     const station = tool.peek() === "station";
+    const ownTargets = station || tool.peek() === "track";
     if (station) this.alts = [];
     if (!w || !n || (this.freeClick && tool.peek() === "track")) return { kind: "free", lx: fx, ly: fy };
     const edgePx = station ? SNAP_EDGE_PX : TRACK_EDGE_PX;
@@ -421,6 +423,7 @@ export class Tools {
     const nearNodes = at && nodes ? nodesNear(w, at[0], at[1], TRACK_NODE_PX * at[2]) : null;
     const nearEdges = at ? edgesNear(n, at[0], at[1], laneReach * at[2]) : null;
     for (const node of nodes ? nearNodes ?? w.nodes.values() : []) {
+      if (ownTargets && !ownsAsset("node", node.id)) continue;
       if (node.bus || node.port) continue; // a bus stop or a port (T-2194) is no track to build on (T-1464)
       if (fam !== null && (node.kind ?? 0) >= 2 !== fam) continue;
       const [lx, ly] = toLocal(node.lng, node.lat);
@@ -435,6 +438,7 @@ export class Tools {
     // pointer over a track within a node radius of the end (along it) carries on that track, not a branch off it
     if (!hit && doubleIds && nodes) {
       for (const [node, { edge, fromA }] of this.doubleEnds(w).loose) {
+        if (ownTargets && !ownsAsset("node", node)) continue;
         const pts = n.edgePts.get(edge), nd = w.nodes.get(node);
         if (!pts || !nd || pts.length < 6) continue;
         const [lx, ly] = toLocal(nd.lng, nd.lat), [x, y] = this.screen(lx, ly);
@@ -455,6 +459,7 @@ export class Tools {
     // each edge's nearest point within reach, px squared
     const near: { d: number; hit: Snap }[] = [];
     for (const { edge, pts, ks } of nearEdges ?? [...n.edgePts].map(([edge, pts]) => ({ edge, pts, ks: null }))) {
+      if (ownTargets && !ownsAsset("edge", edge)) continue;
       if (tramOf && tramOf.has(edge) !== fam) continue;
       const er = doubleIds?.has(edge) ? laneReach : edgePx;
       let eb = er * er, eh: Snap | null = null;
@@ -1662,6 +1667,7 @@ export class Tools {
   }
 
   private queueStop(station: number, tier?: StopTier) {
+    if (!ownsAsset("node", station)) return;
     const session = this.lineSession;
     if (!tier) {
       const id = lineDraft.peek().line, line = world.peek()?.save.lines.find((l) => Number(l.id) === id);

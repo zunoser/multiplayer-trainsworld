@@ -118,6 +118,14 @@ pub struct TrackWorld {
     redo: Vec<Op>,
     /// T-752: a line switching between counts and headways, whose counts this edit's settle keeps
     switching: Option<u32>,
+    protection: Option<CompanyProtection>,
+}
+
+/// Other companies' inputs and attachment points must survive native follow-on edits unchanged.
+struct CompanyProtection {
+    edges: Vec<(u32, Option<super::net::EdgeData>)>,
+    nodes: Vec<(u32, Option<super::net::NodeData>, Option<super::net::StationData>, Vec<u32>)>,
+    lines: Vec<(u32, Option<super::net::LineData>)>,
 }
 
 /// Why an edit that changes what is constructed was refused.
@@ -130,9 +138,37 @@ pub enum ChargeError {
 
 impl TrackWorld {
     pub fn new(net: Network) -> TrackWorld {
-        let mut w = TrackWorld { net, svc: Service::default(), undo: vec![], redo: vec![], switching: None };
+        let mut w = TrackWorld { net, svc: Service::default(), undo: vec![], redo: vec![], switching: None, protection: None };
         w.reload();
         w
+    }
+
+    pub fn protect_company_assets(&mut self, edges: &[u32], nodes: &[u32], lines: &[u32]) {
+        let n = &self.net;
+        self.protection = Some(CompanyProtection {
+            edges: edges.iter().map(|&id| (id, n.edge_data(id))).collect(),
+            nodes: nodes.iter().map(|&id| (id, n.node_data(id), n.station_data(id),
+                n.node_ports.get(id as usize).map_or(vec![], |p| p.ends().to_vec()))).collect(),
+            lines: lines.iter().map(|&id| (id, n.line_data(id))).collect(),
+        });
+    }
+
+    pub fn clear_company_protection(&mut self) { self.protection = None; }
+
+    fn company_assets_unchanged(&self) -> bool {
+        let Some(p) = &self.protection else { return true };
+        let n = &self.net;
+        let edges: std::collections::HashSet<u32> = p.edges.iter().map(|(id, _)| *id).collect();
+        let nodes: std::collections::HashSet<u32> = p.nodes.iter().map(|(id, ..)| *id).collect();
+        let lines: std::collections::HashSet<u32> = p.lines.iter().map(|(id, _)| *id).collect();
+        let independent = (0..n.line_count() as u32).filter(|id| n.line_ok(*id) && !lines.contains(id))
+            .all(|id| !n.line_stops(id).iter().any(|node| nodes.contains(node)) &&
+                !n.line_path(id).iter().any(|edge| edges.contains(&(edge >> 1))));
+        independent && p.edges.iter().all(|(id, data)| n.edge_data(*id) == *data) &&
+        p.nodes.iter().all(|(id, data, station, ports)| n.node_data(*id) == *data &&
+            n.station_data(*id) == *station &&
+            n.node_ports.get(*id as usize).map_or(&[][..], |p| p.ends()) == ports) &&
+        p.lines.iter().all(|(id, data)| n.line_data(*id) == *data)
     }
 
     /// Derive everything from the inputs (after a load or a bulk build).
@@ -714,6 +750,13 @@ impl TrackWorld {
             _ => None,
         };
         let (mut inv, mut t, mut der) = self.apply_rerouted(op, checked)?;
+        if checked && !self.company_assets_unchanged() {
+            let _ = self.apply_raw(inv);
+            let restored = self.net.take_touch();
+            let derived = self.net.derive(&restored);
+            self.note_lines(&restored, &derived);
+            return Err(vec![Issue::CompanyOwnership]);
+        }
         let issues = if checked { self.check(&t, &der) } else { vec![] };
         if !issues.is_empty() {
             // Refuse only what the edit adds: problems already there (an old save under a newer

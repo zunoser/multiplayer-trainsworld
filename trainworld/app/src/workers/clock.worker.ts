@@ -819,6 +819,34 @@ const MAX_PANICS = 8;
 
 /** the network, cash and fleet after the last load or edit */
 let cooperativeGame = false;
+let competition: import("./protocol").Competition | undefined;
+const assetKey = (kind: number, id: number) => `${["edge", "node", "line"][kind]}:${id}`;
+function companyAssets(): Map<string, number> {
+  const rows = api!.company_assets(), out = new Map<string, number>();
+  for(let i=0;i<rows.length;i+=3)out.set(assetKey(rows[i],rows[i+1]),rows[i+2]);
+  return out;
+}
+function companyFleet(otherThan: string): number[] {
+  const ids=Object.entries(competition!.owners).filter(([key,owner])=>key.startsWith("line:")&&owner!==otherThan).map(([key])=>Number(key.slice(5)));
+  return Array.from(api!.company_fleet(new Uint32Array(ids)));
+}
+function setCompanyFleet(f: number[]) {
+  api!.set_fleet(f[0]);api!.set_fleet_fast(f[1]);api!.set_fleet_bus(f[2]);api!.set_fleet_ferry(f[3]);api!.set_fleet_tram(f[4]);
+}
+
+function companyConstructionQuote(id: string): Float64Array {
+  const company = competition?.companies.find(c => c.id === id);
+  if (!company || !api) return new Float64Array();
+  const own = (kind: string, off: Uint32Array = new Uint32Array()) => new Uint32Array(
+    Object.entries(competition!.owners)
+      .filter(([key, owner]) => owner === id && key.startsWith(kind + ":"))
+      .map(([key]) => Number(key.split(":")[1])).filter(n => !off.includes(n)));
+  const other = companyFleet(id);
+  return Float64Array.from(api.company_construction_quote(
+    own("edge", api.off_edges()), own("node", api.off_stations()), own("line"),
+    new Uint32Array(company.fleet.map((n, i) => n + other[i]))));
+}
+
 type Kept = { ids?: Uint32Array; net: Uint8Array; cash: number; fleet: number; fleetFast: number; fleetBus: number; fleetFerry: number; fleetTram: number };
 let kept: Kept | null = null;
 function modelNow(a: TrackApi): Kept {
@@ -2264,6 +2292,24 @@ function settle(): boolean {
         e.points = (e.points ?? 0) + v;
         for (const r of regionEntries(z, d.day, h)) r.points = (r.points ?? 0) + v;
       }
+    }
+    if(competition) {
+      const byCompany=new Map(competition.companies.map(c=>[c.id,c]));
+      for(const [id,per] of lineIncome) {
+        const c=byCompany.get(competition.owners[`line:${id}`]);if(!c)continue;
+        const income=fareHour(per,t+api.line_shift(id),kindOfLine(id))*df;
+        c.revenue+=income;c.cash+=income;
+      }
+      for(const row of rl.costs) {
+        const c=byCompany.get(competition.owners[`line:${row.id}`]);if(!c)continue;
+        const cost=costHour(row.run,t+row.shift,row.tail)*dc;
+        c.running+=cost;c.cash-=cost;
+      }
+      for(const [key,perDay] of companyAssets()) {
+        const c=byCompany.get(competition.owners[key]);if(!c)continue;
+        const cost=perDay/24*dc;c.upkeep+=cost;c.cash-=cost;
+      }
+      cash=competition.companies.reduce((v,c)=>v+c.cash,0);
     }
     settledT = full ? t + 3600 : end;
     if (full) { ended = true; hourShape.delete(h); }
@@ -3769,8 +3815,11 @@ function applyInner(op: EditOp): Applied {
       return { r: a.set_station_name(op.node, op.name) };
     case "removeStation":
       return { r: a.remove_station(op.node) };
-    case "construct":
-      return { r: a.construct_with_buses(new Uint32Array(op.edges), new Uint32Array(op.stations), new Uint32Array(op.buses ?? [])) };
+    case "construct": {
+      const offEdges = new Set(op.enabledOnly ? a.off_edges() : []);
+      const offStations = new Set(op.enabledOnly ? a.off_stations() : []);
+      return { r: a.construct_with_buses(new Uint32Array(op.edges.filter(e => !offEdges.has(e))), new Uint32Array(op.stations.filter(n => !offStations.has(n))), new Uint32Array(op.buses ?? [])) };
+    }
     case "constructAll":
       return { r: a.construct_all() };
     case "blueprintOff":
@@ -4080,9 +4129,11 @@ onmessage = (e: MessageEvent<ToClock>) => {
 };
 function cooperativeContext(): CooperativeContext {
   const { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions } = header();
-  return { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions, rate: clk.rate };
+  return { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions, rate: clk.rate, ...(competition ? {competition: structuredClone(competition)} : {}) };
 }
 function takeCooperativeContext(c: CooperativeContext) {
+  competition = c.competition ? structuredClone(c.competition) : undefined;
+  if(competition) api!.set_unlimited(false);
   clk = { t: c.clock, rate: c.rate, at: wallNow() };
   settledT = c.clock;
   partHour = Math.floor(c.clock / 3600);
@@ -4095,6 +4146,10 @@ function takeCooperativeContext(c: CooperativeContext) {
   ledger = mergeLedger(c.ledger, d => d.day);
   hourLedger = mergeLedger(c.hours, d => d.hour);
   loadRegions(c.regions);
+  if (competition) {
+    api!.set_cash(competition.companies.reduce((sum, company) => sum + company.cash, 0));
+    setCompanyFleet([0,1,2,3,4].map(i => competition!.companies.reduce((sum, company) => sum + company.fleet[i], 0)));
+  }
 }
 
 async function processMessage(msg: ToClock) {
@@ -4117,6 +4172,18 @@ async function processMessage(msg: ToClock) {
     const rate = msg.context?.rate ?? clk.rate;
     if (msg.context) takeCooperativeContext(msg.context);
     const before = cooperativeContext();
+    const company = competition?.companies.find(c=>c.id===msg.company);
+    if(competition && !company)throw new Error("Unknown company");
+    const assets = competition ? companyAssets() : null;
+    const otherFleet = company ? companyFleet(company.id) : null;
+    if(company) {
+      const other = (kind: string) => new Uint32Array(Object.entries(competition!.owners)
+        .filter(([key, owner]) => owner !== company.id && key.startsWith(kind + ":"))
+        .map(([key]) => Number(key.split(":")[1])));
+      api.protect_company_assets(other("edge"), other("node"), other("line"));
+      api.set_cash(company.cash);api.set_unlimited(false);
+      setCompanyFleet(company.fleet.map((n,i)=>n+otherFleet![i]));
+    }
     clk = { t: before.clock, rate: 0, at: wallNow() };
     settledT = before.clock;
     cooperativeCapture = { seq: msg.seq };
@@ -4125,14 +4192,28 @@ async function processMessage(msg: ToClock) {
       if (followUp) await guardedFollowUp();
       const answer = cooperativeCapture.answer;
       if (!answer) throw new Error("Edit returned no answer");
+      if(company) {
+        company.cash=api.cash();company.spent+=answer.charge;
+        company.fleet=[api.fleet(),api.fleet_fast(),api.fleet_bus(),api.fleet_ferry(),api.fleet_tram()].map((n,i)=>Math.max(0,n-otherFleet![i]));
+        const now=companyAssets();
+        for(const key of assets!.keys())if(!now.has(key))delete competition!.owners[key];
+        for(const key of now.keys())if(!assets!.has(key))competition!.owners[key]=company.id;
+        // Native affordability uses one wallet; shared simulation cash remains the sum.
+        api.set_cash(competition!.companies.reduce((v,c)=>v+c.cash,0));
+        setCompanyFleet([0,1,2,3,4].map(i=>competition!.companies.reduce((v,c)=>v+c.fleet[i],0)));
+      }
       clk = { t: before.clock, rate, at: wallNow() };
       send({ kind: "coopResult", seq: msg.seq, result: { answer, before, after: cooperativeContext() } });
-    } catch (error) { send({ kind: "coopResult", seq: msg.seq, error: String(error) }); }
-    finally { cooperativeCapture = null; }
+    } catch (error) {
+      takeCooperativeContext(before);
+      send({ kind: "coopResult", seq: msg.seq, error: String(error) });
+    }
+    finally { api.clear_company_protection(); cooperativeCapture = null; }
     return;
   }
   if (msg.kind === "coopSnapshot") {
     cooperativeGame = true;
+    competition = undefined;
     await ready;
     if (followUp) await guardedFollowUp();
     try {
@@ -4706,6 +4787,7 @@ async function handleMessage(msg: ToClock) {
       : q.what === "removal" ? new Float64Array(api.removal_lines(new Uint32Array(q.edges), new Uint32Array(q.stations)))
       : q.what === "busQuote" ? busQuoteLL(api, q.line, q.route)
       : q.what === "rebuildQuote" ? rebuildQuoteAnswer(q.edges, q.stations, q.level, q.kind, q.tracks)
+      : q.what === "companyQuote" ? companyConstructionQuote(q.company)
       : q.what === "blueprintQuote" ? Float64Array.from(api.blueprint_cost_items())
       : q.what === "blueprintPieces" ? Float64Array.from(api.blueprint_piece_costs())
       : q.what === "lineCost" ? new Float64Array([api.line_build_cost(q.line), api.line_train_cost(q.line)])

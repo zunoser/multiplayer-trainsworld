@@ -7,6 +7,10 @@ const SHORT_PIECE_M: f64 = 10.0;
 
 #[wasm_bindgen]
 impl TrackApi {
+    pub fn protect_company_assets(&mut self, edges: &[u32], nodes: &[u32], lines: &[u32]) {
+        self.w.protect_company_assets(edges, nodes, lines);
+    }
+    pub fn clear_company_protection(&mut self) { self.w.clear_company_protection(); }
     // ---- money
     pub fn cash(&self) -> f64 {
         self.cash
@@ -181,6 +185,54 @@ impl TrackApi {
         let port_count = (0..n.node_alive.len()).filter(|&i| upkept_port(n, i)).count() as f64;
         let ports = port_count * port_upkeep();
         vec![track + stations + buses + ports, track, stations, km, count, buses, bus_km, ports, port_count]
+    }
+    /// Company accounting: every live asset as [kind, id, upkeep/day US$M].
+    /// 0 track, 1 node (including planned stations), 2 line.
+    pub fn company_assets(&self) -> Vec<f64> {
+        let n = &self.w.net;
+        let mut out = vec![];
+        for e in 0..n.edge_alive.len() {
+            if n.edge_ok(e as u32) {
+                out.extend([0.0, e as f64, edge_upkeep(n, e).unwrap_or(0.0)]);
+            }
+        }
+        for i in 0..n.node_alive.len() {
+            if !n.node_ok(i as u32) { continue; }
+            let up = if upkept_station(n, i) { station_upkeep(n, i) }
+                else if upkept_port(n, i) { port_upkeep() } else { 0.0 };
+            out.extend([1.0, i as f64, up]);
+        }
+        for i in 0..self.w.svc.lines.len() {
+            if n.line_ok(i as u32) {
+                out.extend([2.0, i as f64, bus_upkeep(n, i as u32).unwrap_or(0.0)]);
+            }
+        }
+        out
+    }
+    /// Required vehicles of each kind for precisely these companies' lines.
+    pub fn company_fleet(&self, lines: &[u32]) -> Vec<u32> {
+        let mut out = vec![0; FLEETS];
+        for &id in lines {
+            let i = id as usize;
+            if let Some(l) = self.w.svc.lines.get(i).filter(|l| l.ok && l.running) {
+                out[fleet_kind(&self.w.net, i)] += l.trains.iter().copied().max().unwrap_or(0) * l.cars;
+            }
+        }
+        out
+    }
+    /// Infrastructure and additional vehicles for precisely the selected company's construction.
+    /// Trial construction restores the network and never spends cash or changes undo history.
+    pub fn company_construction_quote(&mut self, edges: &[u32], stations: &[u32], buses: &[u32], fleet: &[u32]) -> Vec<f64> {
+        if fleet.len() != FLEETS { return vec![]; }
+        let ops = self.construct_ops(edges, stations, buses);
+        if ops.is_empty() { return vec![0.0, 0.0]; }
+        match self.w.trial_with(Op::Batch(ops), cars_needed) {
+            Ok((result, need)) => {
+                let vehicles = (0..FLEETS).map(|k| need[k].saturating_sub(fleet[k]) as f64 * CAR_PRICES[k]).sum();
+                vec![result.charge, vehicles]
+            }
+            Err(_) => vec![],
+        }
     }
     /// Each running line's share of the upkeep a game day, US$M, as `[line, share]` pairs, then
     /// `[-1, rest]` for the track and stations no running line uses (T-867). Each edge's upkeep is
@@ -358,4 +410,89 @@ impl TrackApi {
         rows
     }
 
+}
+
+#[cfg(test)]
+mod company_tests {
+    use super::*;
+    #[test]
+    fn company_guard_rejects_station_sweep_over_another_company_track() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.cooperative_enable();
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_point_middle(0), 0);
+        let foreign = a.w.net.edge_data(0);
+        let before = a.save();
+        a.protect_company_assets(&[0], &[0], &[]);
+        assert_ne!(a.add_station(2, 1, 4050., 0., 400, "Boundary".into()), 0);
+        assert_eq!(a.w.net.edge_data(0), foreign);
+        assert_eq!(a.save(), before);
+        a.clear_company_protection();
+        assert_eq!(a.add_station(2, 1, 4050., 0., 400, "Boundary".into()), 0);
+        assert_ne!(a.w.net.edge_data(0), foreign);
+    }
+    #[test]
+    fn company_guard_rolls_back_foreign_splits_moves_and_attachments() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.cooperative_enable();
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_route(&[0., 0., 0., 3000., 0., 0., 0., 8000., 3000., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_station(1, 0, 0., 0., 200, "Foreign A".into()), 0);
+        assert_eq!(a.add_station(1, 1, 0., 0., 200, "Foreign B".into()), 0);
+        a.protect_company_assets(&[0], &[0, 1], &[]);
+        let before = a.save();
+        let cash = a.cash();
+        assert_ne!(a.add_point_middle(0), 0);
+        assert_eq!(a.save(), before);
+        assert_ne!(a.set_node(0, 0., 100., 0, false), 0);
+        assert_eq!(a.save(), before);
+        assert_ne!(a.add_route(&[1., 0., 0., 0., 0., 0., 0., 1000., 1000., 0.], &[], 2, false), 0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.cash(), cash);
+        let line = a.new_line_id();
+        assert_ne!(a.set_line_with_trains(line, &[0, 1], 2, 1, 0, 30., 180., 5, 0, "Not mine".into()), 0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.set_node(2, 0., 3200., 0, false), 0);
+        a.clear_company_protection();
+        assert_eq!(a.add_point_middle(0), 0);
+    }
+    #[test]
+    fn company_quote_matches_selected_construction_without_mutating_world() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_route(&[0., 0., 0., 2000., 0., 0., 0., 8000., 2000., 0.], &[], 2, false), 0);
+        let before = a.save();
+        let cash = a.cash();
+        let quote = a.company_construction_quote(&[0], &[], &[], &[0; FLEETS]);
+        assert!(quote[0] > 0.0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.cash(), cash);
+        assert_eq!(a.construct(&[0], &[]), 0);
+        assert!((cash - a.cash() - quote.iter().sum::<f64>()).abs() < 1e-8);
+        assert!(a.blueprint_cost() > 0.0);
+    }
+    #[test]
+    fn company_assets_match_total_upkeep_and_keep_planned_ids() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        let planned = a.company_assets();
+        assert!(!planned.is_empty());
+        assert!(planned.chunks_exact(3).all(|row| row[2] == 0.));
+        assert_eq!(a.construct_all(), 0);
+        let total: f64 = a.company_assets().chunks_exact(3).map(|row| row[2]).sum();
+        assert!(total > 0.);
+        assert!((total - a.upkeep()[0]).abs() < 1e-9);
+        assert_eq!(a.company_fleet(&[]), vec![0; 5]);
+        for id in [0, 1] {
+            assert_eq!(a.add_station(1, id, 0., 0., 200, format!("S{id}")), 0);
+        }
+        let line = a.new_line_id();
+        assert_eq!(a.set_line_with_trains(line, &[0, 1], 2, 1, 0, 30., 180., 5, 0, "Company".into()), 0);
+        assert_eq!(a.construct_all(), 0);
+        assert!(a.company_fleet(&[line])[0] > 0);
+        assert_eq!(a.company_fleet(&[line])[0], a.cars_needed());
+    }
 }

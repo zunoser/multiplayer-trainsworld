@@ -1,4 +1,11 @@
 {
+  "competition.backup": "Back up company room",
+  "competition.backupTip": "Saves the confirmed room, all company accounts and your company recovery key. Keep this file private.",
+  "competition.restore": "Restore company room",
+  "competition.recover": "Recover my company",
+  "competition.clearBackup": "Clear backup",
+  "multiplayer.error.backup": "This company room backup cannot be restored.",
+  "multiplayer.error.backupSize": "The room backup exceeds the supported size.",
   "account.unreachable": "The server seems to be down. Try again later.",
   "account.answered": "The server answered {status}.",
   "account.noServer": "This copy of the game has no server to send to.",
@@ -2690,6 +2697,7 @@
   "multiplayer.status.connecting": "Connecting…",
   "multiplayer.status.connected": "Connected · everyone can build in real time",
   "multiplayer.status.disconnected": "Disconnected · building paused",
+  "multiplayer.error.competitionStart": "Start company competition from an empty world.",
   "multiplayer.error.game": "Open a game before joining a room.",
   "multiplayer.error.connection": "Connection lost. Leave the room to keep playing locally, or join again.",
   "multiplayer.error.snapshot": "This world cannot be shared. Check its save format and the 2 MB limit.",
@@ -2749,5 +2757,16 @@
   "lobby.backup": "Download a backup",
   "lobby.leave": "Leave",
   "lobby.unlock": "Continue",
-  "lobby.checking": "Checking…"
+  "lobby.checking": "Checking…",
+  "competition.mode": "Game mode",
+  "competition.coop": "Cooperative",
+  "competition.versus": "Competing companies",
+  "competition.startingFunds": "Start in Tokyo · $10 billion per company",
+  "competition.standings": "Company standings",
+  "competition.company": "Company",
+  "competition.cash": "Cash",
+  "competition.profit": "Operating profit",
+  "competition.profitNote": "Cumulative fares minus running costs and maintenance.",
+  "multiplayer.error.ownership": "You can only edit your own tracks, stations and lines. This operation is unavailable for other companies.",
+  "multiplayer.error.company": "Company details are unavailable. Rejoin using the invite link."
 }

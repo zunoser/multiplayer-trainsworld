@@ -5,7 +5,7 @@ import { t } from "../i18n";
 import { choosing } from "../game/loading";
 import { world } from "../game/world";
 import { clockRunning, type GameChoice } from "../workers/clockClient";
-import { checkMultiplayerSession, claimBuilder, connectMultiplayer, invitedRoom, leaveMultiplayer, loginMultiplayer, multiplayer, normalizeRoomCode } from "../game/multiplayer";
+import { checkMultiplayerSession, claimBuilder, connectMultiplayer, invitedRoom, leaveMultiplayer, loginMultiplayer, multiplayer, normalizeRoomCode, readRoomBackup, type RoomBackup } from "../game/multiplayer";
 import { blockKeysOutside } from "./keys";
 
 function waitUntil(read:()=>boolean):Promise<void> {
@@ -26,6 +26,10 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
   const [mode,setMode]=useState<"host"|"join">(invited?"join":"host");
   const [name,setName]=useState(()=>{try{return localStorage.getItem("tw-player-name")??"";}catch{return "";}});
   const [password,setPassword]=useState("");
+  const [gameMode,setGameMode]=useState<"coop"|"versus">("coop");
+  const [backup,setBackup]=useState<RoomBackup|null>(null);
+  const [backupName,setBackupName]=useState("");
+  const backupInput=useRef<HTMLInputElement>(null);
   const [code,setCode]=useState(invited);
   const [busy,setBusy]=useState(false);
   const [checked,setChecked]=useState(false);
@@ -51,9 +55,9 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
       if(!multiplayer.peek().authenticated)throw new Error(t("multiplayer.error.password"));
       if(multiplayer.peek().status!=="offline")await leaveMultiplayer();
       try{localStorage.setItem("tw-player-name",name.trim());}catch{}
-      if(!started.current){started.current=true;choosing.value=false;document.documentElement.classList.remove("choosing");start({newGame:true,newSlot:t("multiplayer.world"),game:{mode:"sandbox",start:"tyo",rightHand:false}});}
+      if(!started.current){started.current=true;choosing.value=false;document.documentElement.classList.remove("choosing");start({newGame:true,newSlot:t("multiplayer.world"),game:{mode:gameMode==="versus"?"normal":"sandbox",start:"tyo",rightHand:false}});}
       await waitUntil(()=>!!world.value&&clockRunning());
-      await connectMultiplayer(name.trim(),mode==="join"?normalizeRoomCode(code):undefined);
+      await connectMultiplayer(name.trim(),mode==="join"?normalizeRoomCode(code):undefined,gameMode,backup??undefined);
       let claimed=false;
       await waitUntil(()=>{
         const current=multiplayer.value;
@@ -81,11 +85,23 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
             <button type="button" role="tab" aria-selected={mode==="join"} class={"btn text"+(mode==="join"?" on":"")} disabled={busy} onClick={()=>{setMode("join");setError("");}}>{t("lobby.join")}</button>
           </div>
           <form class="lobby-form" onSubmit={submit}>
+            {mode==="host"&&<label>{t("competition.mode")}<select value={gameMode} disabled={busy||!!backup} onChange={e=>setGameMode(e.currentTarget.value as "coop"|"versus")}><option value="coop">{t("competition.coop")}</option><option value="versus">{t("competition.versus")}</option></select></label>}
             <label>{t("multiplayer.name")}<input required maxLength={40} autoComplete="nickname" value={name} disabled={busy} onInput={e=>setName(e.currentTarget.value)} /></label>
             {mode==="join"&&<label>{t("lobby.code")}<input class="lobby-code" required autoCapitalize="characters" autoComplete="off" spellcheck={false} placeholder="ABCDE-FG234" value={code} disabled={busy} onInput={e=>setCode(e.currentTarget.value)} /></label>}
+            <input hidden type="file" accept=".json,application/json" ref={backupInput} onChange={async e=>{
+              const input=e.currentTarget,file=input.files?.[0];if(!file)return;
+              try { const value=await readRoomBackup(file);setBackup(value);setBackupName(file.name);setGameMode("versus");if(!name.trim())setName(value.name);setError(""); }
+              catch {setError(t("multiplayer.error.backup"));}
+              input.value="";
+            }} />
+            <div class="coop-actions">
+              <button class="btn text" type="button" disabled={busy} data-tip={t("competition.backupTip")} onClick={()=>backupInput.current?.click()}>{t(mode==="host"?"competition.restore":"competition.recover")}</button>
+              {backup&&<button class="btn text" type="button" disabled={busy} onClick={()=>{setBackup(null);setBackupName("");}}>{t("competition.clearBackup")}</button>}
+            </div>
+            {backup&&<span class="small muted">{backupName}</span>}
             {error&&<p class="lobby-error" role="alert">{error}</p>}
             <button class="btn text lobby-submit" type="submit" disabled={busy}>{busy?t("lobby.preparing"):t(mode==="host"?"lobby.host":"lobby.joinAction")}</button>
-            {mode==="host"&&<p class="muted small lobby-form-note">{t("lobby.hostNote")}</p>}
+            {mode==="host"&&!backup&&<p class="muted small lobby-form-note">{t(gameMode==="versus"?"competition.startingFunds":"lobby.hostNote")}</p>}
           </form>
         </>}
       <footer><a href="https://github.com/zunoser/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a><span>·</span><a href="privacy.html">{t("lobby.privacy")}</a><span>·</span><a href="terms.html">{t("lobby.terms")}</a></footer>

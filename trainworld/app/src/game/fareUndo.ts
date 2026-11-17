@@ -1,3 +1,4 @@
+import { competing } from "./companies";
 // T-1130: fare changes undo and redo with the game's keys and buttons while they are the player's
 // last edits. Fares live in the clock worker, outside the sim's edit history (the track model's,
 // in Rust), so their steps are kept here and the sim's undo takes over when none applies.
@@ -57,6 +58,7 @@ export function changeFares(nodes: FareNode[]) {
 }
 
 export function undo() {
+  if (competing.peek()) return;
   const s = nextUndo();
   if (!s) {
     undone.push("sim");
@@ -70,6 +72,7 @@ export function undo() {
 }
 
 export function redo() {
+  if (competing.peek()) return;
   fresh();
   const kind = undone.pop();
   const s = redos[redos.length - 1];

@@ -1,4 +1,11 @@
 {
+  "competition.backup": "対戦をバックアップ",
+  "competition.backupTip": "確定済みの部屋、各社の会計、自社の復帰キーを保存します。このファイルは他の人に渡さないでください。",
+  "competition.restore": "対戦を復元",
+  "competition.recover": "自社を引き継ぐ",
+  "competition.clearBackup": "選択を解除",
+  "multiplayer.error.backup": "この対戦バックアップは復元できません。",
+  "multiplayer.error.backupSize": "部屋のバックアップが対応サイズを超えています。",
   "account.answered": "サーバーがエラー{status}を返しました。",
   "account.feedbackNotYet": "フィードバックはまだ送れません。数日後にもう一度試してください。",
   "account.noServer": "このゲームには送信先のサーバーがありません。",
@@ -2688,6 +2695,7 @@
   "multiplayer.status.connecting": "接続中…",
   "multiplayer.status.connected": "接続済み・全員がリアルタイムで建設できます",
   "multiplayer.status.disconnected": "切断されました・建設を停止しています",
+  "multiplayer.error.competitionStart": "会社対戦は設備のない新しいワールドから開始してください。",
   "multiplayer.error.game": "先にゲームを開いてください。",
   "multiplayer.error.connection": "接続が切れました。退出してローカルで続けるか、再参加してください。",
   "multiplayer.error.snapshot": "共有できません。セーブ形式と圧縮後 2 MB の上限を確認してください。",
@@ -2747,5 +2755,16 @@
   "lobby.backup": "セーブをダウンロード",
   "lobby.leave": "退出",
   "lobby.unlock": "入る",
-  "lobby.checking": "確認中…"
+  "lobby.checking": "確認中…",
+  "competition.mode": "遊び方",
+  "competition.coop": "協力プレイ",
+  "competition.versus": "会社対戦",
+  "competition.startingFunds": "東京から開始・各社の開始資金は100億ドル",
+  "competition.standings": "会社ランキング",
+  "competition.company": "会社",
+  "competition.cash": "資金",
+  "competition.profit": "営業利益",
+  "competition.profitNote": "営業利益は運賃収入 − 運行費 − 維持費の累計です。",
+  "multiplayer.error.ownership": "他社の設備は編集できません。この操作は自社の線路・駅・路線で行ってください。",
+  "multiplayer.error.company": "会社の情報を確認できません。招待リンクから入り直してください。"
 }
