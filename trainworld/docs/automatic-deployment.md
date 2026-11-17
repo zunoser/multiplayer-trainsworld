@@ -6,9 +6,9 @@ Vite+ 1.7.0 manages the JavaScript toolchain. The root packageManager selects Bu
 
 The workflow has three stages:
 
-1. Windows and Linux run vp install --frozen-lockfile, vp check --quiet, vp run format:check and vp test. All tests import vite-plus/test; the Worker fixture cleanup uses onTestFinished.
-2. Linux runs the default Rust suite with vp run test:native, then vp run build. That task builds both WASM modules with wasm-pack 0.15.0, the frontend, and the Worker through the Cloudflare Vite plugin. It checks the packaged HTML/JS/CSS/WASM and runs the cf upload dry run. The verified app/dist and .cloudflare/output are uploaded as a commit-named artifact.
-3. On main only, a separate job downloads that artifact and runs vp run deploy. This job receives the deployment token and does not rebuild the release. It checks production, then saves the current release assets for the next deployment.
+1. Linux runs vp install --frozen-lockfile, the default Rust suite with vp run test:native, then vp run build. That task builds both WASM modules with wasm-pack 0.15.0, the frontend, and the Worker through the Cloudflare Vite plugin. It checks the packaged HTML/JS/CSS/WASM and runs the cf upload dry run. The app/dist, generated WASM and TypeScript bindings, and .cloudflare/output are uploaded as a commit-named artifact.
+2. Windows and Linux install the same lockfile and download the generated artifact before running vp check --quiet, vp run format:check and vp test. The type checker therefore sees bindings produced by the actual Rust build. All tests import vite-plus/test; the Worker fixture cleanup uses onTestFinished.
+3. On main only, after both platforms pass, a separate job downloads that same artifact and runs vp run deploy. This job receives the deployment token and does not rebuild the release. It checks production, then saves the current release assets for the next deployment.
 
 setup-vp caches Bun downloads and the pinned Vite+/Node/package-manager toolchain. A separate OS/toolchain/Cargo.lock cache covers Cargo dependencies, Rust targets and the pinned wasm-pack binary. Actions are pinned to commit SHAs. Pull requests cannot start the production job; workflow_dispatch on main can re-run the same pipeline.
 

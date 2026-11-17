@@ -58,7 +58,7 @@ export default defineConfig({
         dependsOn: ["build:app"],
         cache: false,
       },
-      check: { command: "vp check --quiet", cache: false },
+      check: { command: "vp check --quiet", dependsOn: ["wasm:demand"], cache: false },
       "format:check": {
         command:
           "vp fmt --check package.json bun.lock vite.config.ts tsconfig.json .github/workflows/deploy.yml trainworld/app/package.json trainworld/app/vite.config.ts trainworld/multiplayer/package.json trainworld/multiplayer/vite.config.ts trainworld/multiplayer/*.test.mjs trainworld/checks/base64.test.mjs trainworld/checks/competition-wire.test.mjs",
@@ -95,6 +95,7 @@ export default defineConfig({
       "test:competition": { command: "node trainworld/checks/competition.mjs", cache: false },
       "test:multiplayer": { command: "node trainworld/checks/multiplayer.mjs", cache: false },
       "test:lobby": { command: "node trainworld/checks/lobby.mjs", cache: false },
+      "bench:base64": { command: "node trainworld/checks/base64-perf.mjs", cache: false },
     },
   },
 });

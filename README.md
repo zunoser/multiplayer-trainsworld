@@ -40,7 +40,7 @@ Run commands from the repository root:
 | --- | --- |
 | vp check --quiet | Lint and type-check the app and configuration |
 | vp test | Run all JavaScript unit and Worker integration tests |
-| vp run verify | Check toolchain formatting, lint/types, Rust and JavaScript tests |
+| vp run verify | Generate WASM/bindings, then check formatting, lint/types, Rust and JavaScript tests |
 | vp run build | Build both WASM modules, the app and Worker; check the packaged release |
 | vp build | Build just the frontend, using the existing WASM output |
 | vp run test:competition | Run the real-browser competition regression against the dev servers |
