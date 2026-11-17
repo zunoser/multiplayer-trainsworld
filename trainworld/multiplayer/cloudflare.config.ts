@@ -4,8 +4,12 @@ export default defineConfig({
     name: 'multiplayer-trainsworld',
     entrypoint: './src/index.mjs',
     compatibilityDate: '2026-11-17',
+    workersDev: false,
+    previewUrls: false,
+    domains: ['trains.aomona.me'],
+    cache: { enabled: false },
     assets: { runWorkerFirst: ['/api/*', '/multiplayer', '/health'] },
-    bindings: {
+    env: {
       ASSETS: bindings.assets(),
       ROOM_PASSWORD: bindings.secret(),
       ROOMS: bindings.durableObject({ worker: 'multiplayer-trainsworld', exportName: 'RailwayRoom' }),

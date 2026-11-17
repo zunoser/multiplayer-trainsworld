@@ -1,12 +1,14 @@
+import { fileURLToPath } from "node:url";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
-import { Miniflare } from 'miniflare';
+import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+const createMiniflare = options => new Miniflare(convertV4MiniflareOptions(options));
 const ORIGIN='https://game.test';
 const snap={save:gzipSync('fixture').toString('base64'),ids:[1,0,0,0,0,0,0,0,0]};
 const context={clock:100,cash:10000,fares:{base:1,perKm:1},ledger:[],rate:0};
 async function fixture(t){
- const mf=new Miniflare({modules:true,scriptPath:new URL('./src/index.mjs',import.meta.url).pathname,compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false});
+ const mf=createMiniflare({modules:true,scriptPath:fileURLToPath(new URL('./src/index.mjs',import.meta.url)),compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false});
  t.after(()=>mf.dispose());
  const login=await mf.dispatchFetch(ORIGIN+'/api/login',{method:'POST',headers:{Origin:ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({password:'test-password'})});
  const cookie=login.headers.get('Set-Cookie').split(';')[0];

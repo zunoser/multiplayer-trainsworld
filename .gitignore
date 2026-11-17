@@ -2,6 +2,9 @@ node_modules/
 __pycache__/
 *.pyc
 .vite/
+.cloudflare/
+.env
+.env.*
 
 # built by `npm run wasm` and `npm run build`
 trainworld/sim/target/
