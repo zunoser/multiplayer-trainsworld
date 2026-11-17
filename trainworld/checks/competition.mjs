@@ -109,6 +109,8 @@ try {
  const newCode=(await state(restored)).code;assert.notEqual(newCode,code);
  assert.equal(await restored.evaluate(()=>window.tw.world.peek().save.lines.length),2);
  const recovered=await restored.evaluate(()=>window.tw.multiplayer.readCooperativeContext());
+ assert.equal(recovered.rate,0);
+ assert.equal(await restored.evaluate(()=>window.tw.clock.running.peek()),false);
  assert.deepEqual(recovered.competition.owners,alphaBackup.archive.competition.owners);
  for(const company of alphaBackup.archive.competition.companies)
   assert(Math.abs(recovered.competition.companies.find(c=>c.id===company.id).cash-company.cash)<1e-6);

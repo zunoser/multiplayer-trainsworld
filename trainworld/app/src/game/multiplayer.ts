@@ -109,10 +109,10 @@ async function command(op: EditOp): Promise<EditAnswer> {
   });
 }
 function sameAnswer(a: CooperativeResult["answer"], b: CooperativeResult["answer"]) { return a.ok===b.ok&&a.line===b.line&&a.node===b.node&&a.skipped===b.skipped; }
-function takeTime(c: CooperativeContext) {
+function takeTime(c: CooperativeContext, initial = false) {
   c = expandContext(c, companies.peek()?.owners ?? {});
   if(c.competition)companies.value=c.competition;
-  if(cooperativeAuthority.peek()) return;
+  if(cooperativeAuthority.peek()&&!initial) return;
   takeCooperativeTime(c);
   clock.set(c.clock);
   if(c.rate>0) clock.setMultiple(c.rate/SPEEDS[0]);
@@ -219,7 +219,7 @@ export async function connectMultiplayer(name: string, code?: string, mode: "coo
         applied=m.baseRevision;
         for(const e of m.events)await applyEvent(e);
         update({status:"connected",busy:false,room:{revision:applied,host:m.host,members:m.members,mode:m.mode}});
-        if(m.time)takeTime(m.time);
+        if(m.time)takeTime(m.time,true);
         send({type:"ready",revision:applied});
         if(new URLSearchParams(location.search).get("debug")!=="1")history.replaceState(null,"",roomInvite());
         clearTimeout(timeout);return;
