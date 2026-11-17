@@ -95,7 +95,7 @@ async function applyEvent(e: Event) {
   askBeforeLeaving(pending.size>0);
 }
 export function normalizeRoomCode(input:string):string {
-  let code=input.trim();try{code=new URLSearchParams(new URL(code).hash.slice(1)).get("room")??code;}catch{}
+  let code=input.trim();try{const url=new URL(code);code=new URLSearchParams(url.hash.slice(1)).get("room")??url.searchParams.get("room")??code;}catch{}
   if(/^[a-f0-9]{40}$/.test(code))return code;
   return code.replace(/[\s-]/g,"").toUpperCase();
 }
@@ -106,7 +106,7 @@ export async function leaveToLobby() {
   const {askBeforeLeaving}=await import("./saveSafety");askBeforeLeaving(false);
   const url=new URL(location.href);url.search="";url.hash="";location.assign(url.href);
 }
-export function invitedRoom() { return new URLSearchParams(location.hash.slice(1)).get("room")??""; }
+export function invitedRoom() { return new URLSearchParams(location.hash.slice(1)).get("room")??new URLSearchParams(location.search).get("room")??""; }
 export function roomInvite() {
   const u=new URL(location.href);u.search="";u.hash=new URLSearchParams({room:multiplayer.peek().code}).toString();return u.href;
 }

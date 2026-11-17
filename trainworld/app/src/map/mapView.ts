@@ -25,7 +25,7 @@ const TOUCH_MAX_ZOOM = 20;
  * An incoming hash is removed from the address bar; the view is kept in sessionStorage instead. */
 function startView(): { center: [number, number]; zoom: number } {
   const v = hashView();
-  if (location.hash) {
+  if (/^#-?[\d.]+\/-?[\d.]+\/-?[\d.]+/.test(location.hash)) {
     try { history.replaceState(history.state, "", location.pathname + location.search); } catch { /* the hash stays */ }
   }
   if (!v) return { center: [-73.96, 40.75], zoom: 11.2 };

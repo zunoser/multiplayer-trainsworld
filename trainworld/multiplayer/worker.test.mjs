@@ -19,7 +19,7 @@ async function fixture(t){
   return {ws,send:m=>ws.send(JSON.stringify(m)),next(match){const i=messages.findIndex(match);if(i>=0)return Promise.resolve(messages.splice(i,1)[0]);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Message timeout')),4000);waiters.push({match,resolve,timer});});}};
  }
  async function host(){const c=await connect();c.send({type:'create',protocol:2,name:'Host',snapshot:snap});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state};}
- async function join(){const c=await connect();c.send({type:'join',protocol:2,name:'Guest'});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state};}
+ async function join(){const c=await connect();c.send({type:'join',protocol:2,name:'Guest'});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});const readyState=await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state,readyState};}
  const result=(request,ok=true)=>({type:'result',id:request.id,actor:request.actor,result:{answer:{ok,issues:[],charge:0},before:context,after:context}});
  return {mf,cookie,connect,host,join,result};
 }
@@ -49,9 +49,8 @@ test('checkpoint compaction retains the latest world for late joiners',async t=>
  const next={...snap,save:gzipSync('new world').toString('base64')};h.c.send({...f.result(request),snapshot:next});await h.c.next(m=>m.type==='commit');
  const g=await f.join();assert.equal(g.state.baseRevision,2);assert.equal(g.state.snapshot.save,next.save);assert.equal(g.state.events.length,0);
 });
-test('disconnect pauses edits and a remaining participant can become host',async t=>{
- const f=await fixture(t),h=await f.host(),g=await f.join();await f.join();h.c.ws.close(1000,'bye');await g.c.next(m=>m.type==='paused');
- g.c.send({type:'claim'});const state=await g.c.next(m=>m.type==='room'&&m.host===g.state.self);assert.equal(state.host,g.state.self);
+test('disconnect automatically transfers the host to a ready participant',async t=>{
+ const f=await fixture(t),h=await f.host(),g=await f.join();await f.join();h.c.ws.close(1000,'bye');const state=await g.c.next(m=>m.type==='room'&&m.host===g.state.self);assert.equal(state.host,g.state.self);
  g.c.send({type:'command',id:'after',op:{op:'repay'}});const r=await g.c.next(m=>m.type==='execute');g.c.send(f.result(r));assert.equal((await g.c.next(m=>m.type==='commit')).revision,2);
 });
 
@@ -62,4 +61,36 @@ test('cursors and chat use authenticated participant identities without changing
  assert.equal(cursor.id,g.state.self);assert.equal(cursor.name,'Guest');assert.equal(cursor.cursor.text,'hello');
  g.c.send({type:'cursor',hidden:true});assert.equal((await h.c.next(m=>m.type==='cursor')).cursor,null);
  const late=await f.join();assert.equal(late.state.revision,1);assert.equal(late.state.events.length,0);
+});
+
+test('the same code restores the checkpoint and journal after everyone leaves',async t=>{
+ const f=await fixture(t),h=await f.host(),g=await f.join();
+ h.c.send({type:'command',id:'saved',op:{op:'repay'}});
+ const request=await h.c.next(m=>m.type==='execute');h.c.send(f.result(request));
+ await g.c.next(m=>m.type==='commit'&&m.id==='saved');
+ h.c.ws.close(1000,'bye');await g.c.next(m=>m.type==='room'&&m.host===g.state.self);
+ await new Promise(resolve=>{g.c.ws.addEventListener('close',resolve,{once:true});g.c.ws.close(1000,'bye');});
+ const back=await f.join();assert.equal(back.state.host,null);
+ assert.equal(back.state.snapshot.save,snap.save);assert.equal(back.state.revision,2);
+ assert.equal(back.state.events[0].id,'saved');
+ assert.equal(back.readyState.host,back.state.self);
+ back.c.send({type:'command',id:'resumed',op:{op:'repay'}});
+ const next=await back.c.next(m=>m.type==='execute');back.c.send(f.result(next));
+ assert.equal((await back.c.next(m=>m.type==='commit'&&m.id==='resumed')).revision,3);
+});
+
+test('handover preserves the running clock and retries an unconfirmed guest operation once',async t=>{
+ const f=await fixture(t),h=await f.host(),g=await f.join();
+ const running={...context,clock:234,rate:2};
+ h.c.send({type:'time',revision:1,context:running});
+ await g.c.next(m=>m.type==='time'&&m.context.clock===234);
+ g.c.send({type:'command',id:'in-flight',op:{op:'repay'}});
+ await h.c.next(m=>m.type==='execute'&&m.id==='in-flight');
+ h.c.ws.close(1000,'bye');
+ const time=await g.c.next(m=>m.type==='time');assert.deepEqual(time.context,running);
+ await g.c.next(m=>m.type==='room'&&m.host===g.state.self);
+ const retry=await g.c.next(m=>m.type==='execute'&&m.id==='in-flight');
+ assert.equal(retry.revision,1);g.c.send(f.result(retry));
+ assert.equal((await g.c.next(m=>m.type==='commit'&&m.id==='in-flight')).revision,2);
+ const late=await f.join();assert.equal(late.state.events.length,1);
 });

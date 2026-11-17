@@ -119,7 +119,7 @@ export class RailwayRoom extends DurableObject {
     }
     if(m.type==='ready') {
       if(m.revision!==this.get('revision')) { this.send(ws,{type:'catchup',events:this.sql.exec('SELECT value FROM events WHERE revision>? ORDER BY revision',m.revision).toArray().map(r=>JSON.parse(r.value))}); return; }
-      a.ready=true;ws.serializeAttachment(a);this.presence();this.pump();return;
+      a.ready=true;ws.serializeAttachment(a);this.electHost();this.presence();this.pump();return;
     }
     if(m.type==='cursor') {
       if(!a.ready || (!m.hidden && Date.now()-(a.cursorAt??0)<80)) return;
@@ -180,17 +180,29 @@ export class RailwayRoom extends DurableObject {
     this.put('pending',pending);
     this.send(host,{type:'execute',...pending,revision:this.get('revision'),checkpoint:this.get('revision')-this.get('baseRevision',0)>=99});
   }
+  electHost() {
+    if(this.get('host'))return;
+    const next=this.peers().find(ws=>this.member(ws).ready);
+    if(!next)return;
+    // Apply the last confirmed clock before granting simulation authority.
+    const time=this.get('time');
+    if(time)this.broadcast({type:'time',revision:this.get('revision'),context:time});
+    this.put('host',this.member(next).id);
+  }
   webSocketClose(ws) {
     const a=this.member(ws);
     ws.serializeAttachment({...a,name:'',ready:false});
     try { ws.close(1000,'Disconnected'); } catch {}
+    this.sql.exec('DELETE FROM requests WHERE actor=?',a.id);
     if(a.id===this.get('host')) {
       this.put('host',null);this.put('pending',null);
-      const time=this.get('time');if(time)this.put('time',{...time,rate:0});
-      this.sql.exec('DELETE FROM requests');
-      this.broadcast({type:'paused'});
-    } else this.sql.exec('DELETE FROM requests WHERE actor=?',a.id);
-    this.presence();
+      this.electHost();
+      if(!this.get('host')) {
+        const time=this.get('time');if(time)this.put('time',{...time,rate:0});
+        this.broadcast({type:'paused'});
+      }
+    }
+    this.presence();this.pump();
   }
   webSocketError(ws) { try{ws.close(1011,'Connection failed');}catch{} this.webSocketClose(ws); }
   async alarm() {

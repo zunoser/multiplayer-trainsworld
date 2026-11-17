@@ -2732,7 +2732,7 @@
   "lobby.authenticated": "Access unlocked on this device",
   "lobby.preparing": "Connecting to your world…",
   "lobby.joinAction": "Join the room",
-  "lobby.hostNote": "Start in Tokyo with unlimited building funds. Share the code once you’re in.",
+  "lobby.hostNote": "Start in Tokyo with unlimited building funds.",
   "lobby.joinNote": "Ask the host for their room code or paste an invite link.",
   "lobby.five": "Up to 5 friends",
   "lobby.together": "Build together in real time",
@@ -2747,5 +2747,7 @@
   "lobby.hostRole": "Host",
   "lobby.youShort": "you",
   "lobby.backup": "Download a backup",
-  "lobby.leave": "Leave"
+  "lobby.leave": "Leave",
+  "lobby.unlock": "Continue",
+  "lobby.checking": "Checking…"
 }

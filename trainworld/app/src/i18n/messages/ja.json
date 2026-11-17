@@ -2730,7 +2730,7 @@
   "lobby.authenticated": "この端末は認証済みです",
   "lobby.preparing": "ワールドに接続しています…",
   "lobby.joinAction": "参加する",
-  "lobby.hostNote": "東京から開始。建設費は無制限です。入室後に参加コードを共有できます。",
+  "lobby.hostNote": "東京から開始・建設費は無制限",
   "lobby.joinNote": "ホストの参加コード、または招待リンクを入力してください。",
   "lobby.five": "最大5人",
   "lobby.together": "みんなで同時に建設",
@@ -2745,5 +2745,7 @@
   "lobby.hostRole": "ホスト",
   "lobby.youShort": "自分",
   "lobby.backup": "セーブをダウンロード",
-  "lobby.leave": "退出"
+  "lobby.leave": "退出",
+  "lobby.unlock": "入る",
+  "lobby.checking": "確認中…"
 }

@@ -78,8 +78,8 @@ try {
   await host.getByRole('button',{name:'設定',exact:true}).click();await host.getByRole('region',{name:'協力プレイ'}).waitFor();
   await mkdir(ARTIFACTS,{recursive:true});await host.screenshot({path:ARTIFACTS+'/multiplayer-realtime-ja.png'});
   await host.context().close();
-  await guest.waitForFunction(()=>window.tw.multiplayer.multiplayer.peek().room?.host===null);
-  await service(guest,'claimBuilder');await ready(guest);
+  await guest.waitForFunction(()=>{const s=window.tw.multiplayer.multiplayer.peek();return s.room?.host===s.self;});
+  await ready(guest);
   const renamed=await guest.evaluate(id=>window.tw.client.edit({op:'lineLook',line:id,name:'After recovery'}),b.line);assert.equal(renamed.ok,true);
   await late.waitForFunction(()=>window.tw.world.peek().save.lines.some(l=>l.name==='After recovery'));
   await service(guest,'leaveMultiplayer');assert.equal((await service(guest,'state')).status,'offline');
