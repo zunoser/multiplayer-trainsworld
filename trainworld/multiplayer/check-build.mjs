@@ -42,8 +42,14 @@ try {
     const response = await mf.dispatchFetch(new URL(name, base).href);
     assert.equal(response.status, 200, name);
     assert.match(response.headers.get('content-type'), name.endsWith('.wasm') ? /application\/wasm/ : name.endsWith('.css') ? /text\/css/ : /javascript/);
+    // Release the dispatch stream before disposing the runtime on Linux CI.
+    assert((await response.arrayBuffer()).byteLength > 0, name);
   }
   const health = await mf.dispatchFetch(base + 'health');
   assert.equal((await health.json()).protocol, 2);
   console.log(`PASS bundled Worker, protected settings and HTML/JS/CSS/WASM MIME (${assets.length} assets)`);
-} finally { await mf.dispose(); }
+} finally {
+  const timeout = setTimeout(() => { console.error('Build test runtime did not shut down'); process.exit(1); }, 15000);
+  await mf.dispose();
+  clearTimeout(timeout);
+}
