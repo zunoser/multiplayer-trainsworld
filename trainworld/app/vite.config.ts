@@ -200,6 +200,16 @@ function dataFallback(): Plugin {
   const KEEP = ["content-type", "content-range", "accept-ranges", "cache-control", "etag"];
   return {
     name: "trainsworld-data-fallback",
+    transformIndexHtml: {
+      order: "pre",
+      handler(_html, ctx) {
+        if (!on || ctx.server) return [];
+        return [
+          { tag: "meta", attrs: { name: "tw-data", content: `${ORIGIN}/trainworld/${version}/` }, injectTo: "head" },
+          { tag: "meta", attrs: { name: "tw-terrain", content: `${ORIGIN}/trainworld/terrain-world/v2/` }, injectTo: "head" },
+        ];
+      },
+    },
     configureServer(server) {
       if (!on) return;
       console.log(`[data] no local data/packs: fetching the game's data from ${ORIGIN}/trainworld/${version}/ as the page asks`);
@@ -237,6 +247,6 @@ export default defineConfig({
   build: { outDir: "dist", target: "es2022" },
   // T-682: the real-network layer reads noritetsu's tiles beside the game (map/realNetwork.ts); 8800 serves them
   // at /noritetsu/ and sends no CORS headers, so the dev server passes the path through
-  server: { proxy: { "/noritetsu": "http://localhost:8800" } },
+  server: { proxy: { "/noritetsu": "http://localhost:8800", "/multiplayer": { target: "ws://127.0.0.1:8787", ws: true } } },
   plugins: [dataFallback(), packs()],
 });

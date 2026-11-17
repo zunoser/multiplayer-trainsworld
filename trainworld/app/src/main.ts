@@ -110,6 +110,7 @@ import { choiceFromUrl, showStartMenu, START_LOGO, worldCover } from "./ui/Start
 import { viewStart } from "./ui/locate";
 import { enterGame, fitAhead, startOpenFit } from "./ui/locate";
 import { realmsAhead } from "./game/realms";
+import * as multiplayerSession from "./game/multiplayer";
 import { ClockClient, clockWorkerStatus, manageSaveSlot, onNetAhead, onNetworkSnapshot, onStationsAhead } from "./workers/clockClient";
 import { demandStuckSince, netAhead, startDemand, stationsAhead, submitNetwork } from "./workers/demandClient";
 import { startDemandViews, viewStats } from "./map/demandViews";
@@ -819,7 +820,7 @@ if (DEBUG) {
   (window as any).tw = {
     failDemand: (why = "forced by ?debug=1") => loadCannotFinish(why), // T-2657: stop demand as if a worker died
     figures: { peaks: figuresPeaks, stopped: figuresStopped }, // T-3314: the longest quiet seen, and the notice's signal
-    soundLog, map, overlay, renderer, labels, capacity, clock, world, selection, display, shade, tools, client, checkPrecision, moneyState, incomeByDay, lastSaved, pick, tripAt, lineRunFactor,
+    multiplayer: multiplayerSession, soundLog, map, overlay, renderer, labels, capacity, clock, world, selection, display, shade, tools, client, checkPrecision, moneyState, incomeByDay, lastSaved, pick, tripAt, lineRunFactor,
     // the current draw anchor (T-307), mercator 0..1, and conversions with it
     get originMerc() { return anchor().merc; },
     anchor, toLocal, toLngLat,

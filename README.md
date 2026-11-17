@@ -30,6 +30,11 @@ npm run dev
 Open the address Vite prints (http://localhost:5173/). `npm run wasm` takes a few minutes the first time. Run it
 again when anything in `trainworld/sim/` changes. `npm run check` type-checks the page.
 
+## Cooperative multiplayer
+
+This working branch adds rooms for up to eight players to build one world together, passing building control
+between participants. See [multiplayer setup and limitations](trainworld/multiplayer/README.md).
+
 ## Data
 
 The game needs city packs, terrain, outlines and real rail networks, about 6 GB in all. They are not in this repo.

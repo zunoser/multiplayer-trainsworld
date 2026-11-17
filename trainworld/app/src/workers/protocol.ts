@@ -315,6 +315,8 @@ export type ToClock =
   /** load a save file (T-029); answered with "loaded". It and "newGame" start a slot named `name`
    * (T-743): no slot is ever written over with another game */
   | { kind: "import"; bytes: ArrayBuffer; name?: string }
+  /** Checked cooperative checkpoint, in a transient view that cannot overwrite a local game. */
+  | { kind: "coopSnapshot"; bytes: Uint8Array; first: boolean; name: string }
   /** start again: empty city (or `game.real`'s network), `START_CASH`, day 1 07:00; answered with "loaded" */
   | { kind: "newGame"; name?: string; game?: NewGameSpec }
   /** T-728: make this normal game a sandbox, for good */
@@ -836,6 +838,7 @@ export type FromClock =
   /** T-2395: the home of the game in hand (`SaveHeader.home`), sent with "opened" */
   | { kind: "home"; home: string | null }
   /** the save file, for the player to keep */
+  | { kind: "coopApplied"; error?: string }
   | { kind: "exported"; bytes: Uint8Array; day: number; share?: true }
   /** a station placement's check (T-311): `issues` as an edit's; `cost` what it adds to the
    * blueprint, US$M */

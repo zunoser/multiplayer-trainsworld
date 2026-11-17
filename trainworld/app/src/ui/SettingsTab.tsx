@@ -25,6 +25,7 @@ import { PurposeSelect } from "./DemandSelector";
 import { FeedbackButton, FeedbackPanel } from "./FeedbackPanel";
 import { t, tNumber, type MessageKey } from "../i18n";
 import { LanguageSelect } from "./LanguageSelect";
+import { MultiplayerSection } from "./MultiplayerSection";
 import { SideRow } from "./SideSwitch";
 
 const THEME_NAME: Record<Theme, MessageKey> = { pink: "settingsTab.pink", blue: "settingsTab.blue", green: "settingsTab.green" };
@@ -62,6 +63,7 @@ export function SettingsTab() {
         <AccountButton kind="settings" />
         {accountState.value === "on" && <span class="login-text muted">{loginText()}</span>}
       </div>
+      <MultiplayerSection />
       <LanguageRow />
       <div class="h">{t("settingsTab.bubbles")}</div>
       {/* the day every demand figure is for, not only the bubbles' (T-2345) */}

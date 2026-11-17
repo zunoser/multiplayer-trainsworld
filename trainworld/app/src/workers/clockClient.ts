@@ -42,6 +42,7 @@ import { saveRefusal } from "../game/memoryCheck";
 import { askBeforeLeaving, keepStorage } from "../game/saveSafety";
 import { afterPaint, BUSY_MS, expectedMs, hideBusy, learnBusy, showBusy } from "../game/busy";
 import { addTerrainGrid, dropTerrainGrids, groundNet, setTerrainIndex } from "../game/terrain";
+import { cooperativeBlocks, cooperativeReadOnly } from "../game/multiplayerGate";
 import { letterOf } from "../game/lineLetter";
 
 /** Text from the clock worker: it sends message keys (docs/localization.md "Workers"), worded here; anything else as it is. */
@@ -347,6 +348,16 @@ function toWorld(s: ClockState): WorldView {
 }
 
 let current: ClockClient | null = null;
+let cooperativeLoad: ((error?: string) => void) | null = null;
+/** The caller serializes checkpoints. Acknowledged only after the worker has applied the whole world. */
+export function applyCooperativeSave(bytes: Uint8Array, first: boolean): Promise<void> {
+  if (!current || cooperativeLoad) return Promise.reject(new Error("Cooperative load unavailable"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { cooperativeLoad = null; reject(new Error("Cooperative load timed out")); }, 120_000);
+    cooperativeLoad = error => { clearTimeout(timer); cooperativeLoad = null; error ? reject(new Error(error)) : resolve(); };
+    current!.post({ kind: "coopSnapshot", bytes, first, name: t("multiplayer.world") });
+  });
+}
 
 /** Download the game as a file (T-029). */
 export function exportGame() {
@@ -898,6 +909,7 @@ export class ClockClient {
   private posts = 0;
   private readsOut = new Map<string, { posts: number; p: Promise<Float64Array> }>();
   post(msg: ToClock, transfer: Transferable[] = []) {
+    if (cooperativeBlocks(msg)) { say(t("multiplayer.readOnly"), true); return; }
     if (tracing() && msg.kind === "edit") trace("clock-post", { seq: msg.seq, edit: editTrace(msg.op) });
     this.posts++;
     if (this.worker && this.booted) this.worker.postMessage(msg, transfer);
@@ -1202,6 +1214,9 @@ export class ClockClient {
       case "unsaved":
         askBeforeLeaving(msg.on);
         break;
+      case "coopApplied":
+        cooperativeLoad?.(msg.error);
+        break;
       case "exported": {
         if (msg.share) { shareExport?.(msg.bytes); break; }
         const { slots, active, viewing } = saveSlotsState.value;
@@ -1352,6 +1367,7 @@ export class ClockClient {
 
   /** T-3297: `flipSide` above. */
   flipSide(): Promise<Float64Array> {
+    if (cooperativeReadOnly.peek()) { say(t("multiplayer.readOnly"), true); return Promise.resolve(new Float64Array()); }
     const seq = ++this.seq;
     this.post({ kind: "flipSide", seq });
     return new Promise<Float64Array>((res) => this.queries.set(seq, res));
@@ -1360,6 +1376,7 @@ export class ClockClient {
   /** Send an edit; the promise resolves with the worker's answer. `early` "rows": a stop click's (T-2766), answered
    * once the world holds it, its network a moment after the clicks stop. */
   edit(op: EditOp, early: boolean | "rows" = false): Promise<EditAnswer> {
+    if (cooperativeReadOnly.peek()) return Promise.resolve({ ok: false, issues: [t("multiplayer.readOnly")], charge: 0 });
     const seq = ++this.seq;
     if (early === "rows") {
       this.stopsOut++;

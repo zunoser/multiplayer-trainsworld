@@ -1975,3 +1975,13 @@ html.ui-hidden .ui-hint.on { display: block; }
 .new-version-note { border-color: var(--accent); }
 .new-version-note .dsn-row .btn { border-color: var(--accent); color: var(--text); }
 .stop-mark.hot { box-shadow: 0 0 0 3px var(--map-casing, #fff), 0 0 0 5px var(--c), 0 0 12px 6px var(--c); z-index: 4; }
+
+/* Cooperative controls follow the dock's existing theme and spacing. */
+.coop { margin-bottom: 16px; }
+.coop-field { display: grid; gap: 4px; margin: 8px 0; }
+.coop-field input { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); padding: 6px; }
+.coop-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.coop-members { list-style: none; margin: 8px 0; padding: 0; }
+.coop-members li { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; }
+.coop-members li span { min-width: 0; overflow-wrap: anywhere; }
+.coop p { margin: 8px 0; overflow-wrap: anywhere; }

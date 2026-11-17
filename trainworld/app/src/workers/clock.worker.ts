@@ -4072,6 +4072,21 @@ onmessage = (e: MessageEvent<ToClock>) => {
   messages = messages.then(() => processMessage(msg)).then(pumpBlocks).catch(err => send({ kind: "error", message: String(err) }));
 };
 async function processMessage(msg: ToClock) {
+  if (msg.kind === "coopSnapshot") {
+    await ready;
+    if (followUp) await guardedFollowUp();
+    try {
+      if (msg.first) await intoView(msg.name, () => loadGame(msg.bytes, "file"));
+      else await loadGame(msg.bytes, "file");
+      trackVersion++;
+      dirty = edited = false;
+      send({ kind: "coopApplied" });
+    } catch (err) {
+      if (isPanic(err)) await recover(err, "import", MODEL_RESTORED, performance.now(), true);
+      send({ kind: "coopApplied", error: String(err) });
+    }
+    return;
+  }
   if (msg.kind === "init") {
     if (msg.patch) patchMode = msg.patch;
     setBandCheck(patchMode === "check");
