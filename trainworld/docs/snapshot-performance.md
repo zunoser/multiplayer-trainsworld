@@ -39,8 +39,8 @@ and retain their encoder's previous performance. No dependency or browser minimu
 Reproduce with a local Vite server, Playwright and Chrome as described in `multiplayer/README.md`:
 
 ```sh
-node trainworld/checks/base64.mjs
-node trainworld/checks/base64-perf.mjs http://127.0.0.1:6183/
+vp test base64
+vp run bench:base64 http://127.0.0.1:5173/
 ```
 
 The first check covers every byte value, empty data, padding, whitespace, malformed strings,
@@ -82,7 +82,7 @@ rule change is included. The retained change targets the measured snapshot conve
 Both WASM modules and the Vite production application build successfully. The sparse local
 checkout reports missing optional map/data packs during bundling; runtime tests obtain the
 needed packs through the existing Vite data fallback. The shared encoder also runs successfully
-in a real module worker. TypeScript checking, `checks/base64.mjs` and all eight local
+in a real module worker. TypeScript checking, `checks/base64.test.mjs` and all eight local
 Workers/Durable Objects tests pass.
 
 `checks/multiplayer.mjs` passes with real WASM: simultaneous construction and property edits,

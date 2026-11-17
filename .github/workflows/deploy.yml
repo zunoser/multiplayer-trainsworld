@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,62 +12,123 @@ concurrency:
   group: trainsworld-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  CF_SEND_TELEMETRY: "false"
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    env:
-      CF_SEND_TELEMETRY: 'false'
+  check:
+    name: Check (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
-          node-version: '24.22.0'
-          cache: npm
-          cache-dependency-path: |
-            trainworld/app/package-lock.json
-            trainworld/multiplayer/package-lock.json
-      - name: Install Rust and WASM target
-        run: rustup target add wasm32-unknown-unknown
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --version 0.15.0 --locked
-      - run: npm --prefix trainworld/app ci
-      - run: npm --prefix trainworld/multiplayer ci
-      - run: npm --prefix trainworld/multiplayer test
-      - name: Build game and both WASM modules
-        run: npm --prefix trainworld/app run build
+          version-file: package.json
+          node-version-file: .node-version
+          cache: true
+          cache-toolchain: true
+          cache-dependency-path: bun.lock
+          run-install: |
+            - cwd: .
+              args: ['--frozen-lockfile']
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+          path: trainworld
+      - run: vp check --quiet
+      - run: vp run format:check
+      - run: vp test
+
+  build:
+    name: Build game and Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+        with:
+          version-file: package.json
+          node-version-file: .node-version
+          cache: true
+          cache-toolchain: true
+          cache-dependency-path: bun.lock
+          run-install: |
+            - cwd: .
+              args: ['--frozen-lockfile']
+      - name: Install pinned Rust and WASM target
+        run: rustup show
+      - name: Restore Cargo and wasm-pack cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/wasm-pack
+            ~/.cargo/registry
+            ~/.cargo/git
+            trainworld/sim/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'trainworld/sim/Cargo.lock') }}-wasm-pack-0.15.0
+      - name: Install wasm-pack if not cached
+        shell: bash
+        run: |
+          if ! command -v wasm-pack >/dev/null || [ "$(wasm-pack --version)" != "wasm-pack 0.15.0" ]; then
+            cargo install wasm-pack --version 0.15.0 --locked
+          fi
+      - run: vp run test:native
       - name: Restore previous production assets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: trainworld/multiplayer/.cloudflare/retained-assets
           key: production-assets-${{ github.run_id }}
           restore-keys: production-assets-
-      - name: Prepare asset headers and retain the previous release
-        run: npm --prefix trainworld/multiplayer run prepare:assets
-      - name: Bundle Worker and validate deployment
-        working-directory: trainworld/multiplayer
-        run: |
-          npm run build
-          npm run check:build
-          npx cf deploy --prebuilt --mode production --dry-run
-      - name: Deploy main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: trainworld/multiplayer
+      - run: vp run build
+      - name: Save verified release
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            trainworld/app/dist
+            trainworld/app/src/wasm
+            trainworld/multiplayer/.cloudflare/output
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy production
+    needs: [build, check]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+        with:
+          version-file: package.json
+          node-version-file: .node-version
+          cache: true
+          cache-toolchain: true
+          cache-dependency-path: bun.lock
+          run-install: |
+            - cwd: .
+              args: ['--frozen-lockfile']
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+          path: trainworld
+      - name: Deploy the verified artifact and check production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: '1ee487160d1c8983651d4fafc7be51c5'
-        run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Configure the CLOUDFLARE_API_TOKEN repository secret for this Worker.'; exit 1; }
-          npx cf deploy --prebuilt --mode production --provision=false --force
-          node check-deployment.mjs
-      - name: Replace the retained release after successful deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: trainworld/multiplayer
-        run: node retain-current-assets.mjs
+          CLOUDFLARE_ACCOUNT_ID: "1ee487160d1c8983651d4fafc7be51c5"
+        run: vp run deploy
+      - run: vp run assets:retain
       - name: Save this production release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: trainworld/multiplayer/.cloudflare/retained-assets
           key: production-assets-${{ github.run_id }}
