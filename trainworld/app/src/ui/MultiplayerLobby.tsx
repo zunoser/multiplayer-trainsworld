@@ -104,7 +104,7 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
             {mode==="host"&&!backup&&<p class="muted small lobby-form-note">{t(gameMode==="versus"?"competition.startingFunds":"lobby.hostNote")}</p>}
           </form>
         </>}
-      <footer><a href="https://github.com/aomona/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a><span>·</span><a href="privacy.html">{t("lobby.privacy")}</a><span>·</span><a href="terms.html">{t("lobby.terms")}</a></footer>
+      <footer><a href="https://github.com/zunoser/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a><span>·</span><a href="privacy.html">{t("lobby.privacy")}</a><span>·</span><a href="terms.html">{t("lobby.terms")}</a></footer>
     </div>
   </main>;
 }

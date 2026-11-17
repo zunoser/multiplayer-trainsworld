@@ -38,6 +38,6 @@ export function MultiplayerSection() {
       <div class="coop-actions"><button class="btn text" disabled={s.busy} onClick={()=>void leaveToLobby()}>{t("multiplayer.leave")}</button></div>
     </>}
     {s.error&&<p role="alert">{s.error}</p>}
-    <div class="coop-actions"><a href="https://github.com/aomona/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a></div>
+    <div class="coop-actions"><a href="https://github.com/zunoser/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a></div>
   </section>;
 }

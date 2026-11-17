@@ -1,4 +1,5 @@
 import type { CooperativeContext, CooperativeResult } from "./protocol";
+import { encodeBase64 } from "../base64";
 // The clock worker (SPEC 6.5, 7; T-025): owns the network (the track model's `TrackApi`, T-040),
 // applies edits, runs profiles and the capacity pass, and sends the main thread what it draws:
 // track polylines, keyframes (shared phase tables) and each game hour's trips (the hourly
@@ -2583,9 +2584,7 @@ async function slotSummary(): Promise<SlotSummary> {
       ctx.restore();
     });
     const png = new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
-    let bin = "";
-    for (let k = 0; k < png.length; k += 0x8000) bin += String.fromCharCode(...png.subarray(k, k + 0x8000));
-    summary.thumb = "data:image/png;base64," + btoa(bin);
+    summary.thumb = "data:image/png;base64," + encodeBase64(png);
   } catch { /* no picture */ }
   return summary;
 }

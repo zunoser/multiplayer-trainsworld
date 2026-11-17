@@ -7,6 +7,7 @@
 // start menu before the worker starts, and downloads or deletes the account's other games.
 
 import { t } from "../i18n";
+import { encodeBase64 } from "../base64";
 import { backupBeforeReplace, changeCloudDeletes, deleteSlot, leaseSlot, listSlots, readCloudDeletes, readStored, readSync, stampOrigins, writeSlot, writeSync, type GameMode, type SaveSlot, type StoredSave, type SyncRecord, type ThumbPanel } from "./saveFile";
 import { accountEditOf, assignOrigins, editOf, syncedEditOf, withoutForkTime } from "./versions";
 import { patientFetch, CLOUD_STALL_MS } from "./patientFetch";
@@ -122,9 +123,7 @@ export async function listGames(ctx: CloudContext): Promise<AccountList | null> 
 export async function gamePicture(ctx: CloudContext, id: string): Promise<string | undefined> {
   const a = await call(ctx, "GET", `trainworld/games/${id}/picture`, undefined, "bytes");
   if (a.status !== 200 || !a.bytes) return undefined;
-  let bin = "";
-  for (let k = 0; k < a.bytes.length; k += 0x8000) bin += String.fromCharCode(...a.bytes.subarray(k, k + 0x8000));
-  return "data:image/png;base64," + btoa(bin);
+  return "data:image/png;base64," + encodeBase64(a.bytes);
 }
 
 export interface Fetched { stored: StoredSave; id: string; rev: number; savedAt: number }

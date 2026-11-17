@@ -5,12 +5,12 @@ import { gzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
-import { Miniflare } from 'miniflare';
+import { Miniflare } from './miniflare-v4.mjs';
 const ORIGIN='https://game.test';
 const snap={save:gzipSync('fixture').toString('base64'),ids:[1,0,0,0,0,0,0,0,0]};
 const context={clock:100,cash:10000,fares:{base:1,perKm:1},ledger:[],rate:0};
 async function fixture(t,options={}){
- const mf=new Miniflare({modules:true,scriptPath:fileURLToPath(new URL('./src/index.mjs',import.meta.url)),compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false,...options});
+ const mf=new Miniflare({modules:['index.mjs','competition.mjs'].map(name=>({type:'ESModule',path:fileURLToPath(new URL('./src/'+name,import.meta.url))})),compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false,...options});
  let disposed=false;const dispose=async()=>{if(!disposed){disposed=true;await mf.dispose();}};
  t.after(dispose);
  const login=await mf.dispatchFetch(ORIGIN+'/api/login',{method:'POST',headers:{Origin:ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({password:'test-password'})});
@@ -182,7 +182,7 @@ test('competition checkpoint and journal survive a new Durable Object runtime',a
  const root=resolve(tmpdir());
  await mkdir(root,{recursive:true});const directory=await mkdtemp(resolve(root,'tw-state-'));
  if(!directory.startsWith(root+sep))throw Error('Invalid test storage directory');
- const options={durableObjectsPersist:directory};
+ const options={resourcePersistencePath:directory};
  const f=await fixture(t,options),key='cold-host-123456789012345678901234567890';
  const h=await f.host({mode:'versus',companyKey:key,context});
  const g=await f.join({companyKey:'cold-guest-123456789012345678901234567890'});
