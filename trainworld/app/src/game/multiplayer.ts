@@ -1,4 +1,5 @@
 import { askBeforeLeaving } from "./saveSafety";
+import { encodeBase64, decodeBase64 } from "../base64";
 import { effect, signal } from "@preact/signals";
 import { clock, SPEEDS } from "./clock";
 import { cooperative, cooperativeAuthority, cooperativeEditSink, cooperativeReadOnly } from "./multiplayerGate";
@@ -45,19 +46,15 @@ function send(message: unknown) {
   if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error(errorText("connection"));
   socket.send(JSON.stringify(message));
 }
-function encode(bytes: Uint8Array): string {
-  let text = ""; for(let at=0;at<bytes.length;at+=8192) text += String.fromCharCode(...bytes.subarray(at,at+8192));
-  return btoa(text);
-}
 function decode(text: string): Uint8Array {
   if(text.length > Math.ceil((2<<20)/3)*4) throw new Error(errorText("snapshot"));
-  return Uint8Array.from(atob(text), c=>c.charCodeAt(0));
+  return decodeBase64(text);
 }
 async function snapshot(): Promise<Snapshot> {
   const exported = await exportCooperativeSave();
   const bytes = await forShare(exported.bytes);
   if(!bytes) throw new Error(errorText("snapshot"));
-  return { save: encode(bytes), ids: Array.from(exported.ids) };
+  return { save: encodeBase64(bytes), ids: Array.from(exported.ids) };
 }
 function rejectPending() {
   for(const p of pending.values()) { clearTimeout(p.timer); p.done({ok:false,issues:[errorText("connection")],charge:0}); }
