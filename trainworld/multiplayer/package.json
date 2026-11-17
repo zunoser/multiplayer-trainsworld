@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node dev.mjs",
     "start": "node dev.mjs",
-    "test": "node --test worker.test.mjs",
+    "test": "node --test worker.test.mjs check-deployment.test.mjs",
     "prepare:assets": "node prepare-assets.mjs",
     "build": "cf build",
     "check:build": "node check-build.mjs"
