@@ -41,6 +41,30 @@ try {
  await guest.waitForFunction(()=>window.tw.clock.running.peek());
  await host.evaluate(()=>window.tw.clock.setRunning(false));
  await host.waitForFunction(async()=>{const m=window.tw.multiplayer;const c=await m.readCooperativeContext();return c.competition.companies.every(c=>c.upkeep>0);});
+ // Quotes exclude opponents and disabled pieces, and match the actual debit.
+ const planned=await host.evaluate(async()=>{
+  const t=window.tw, before=new Set(t.world.peek().edges.map(e=>e.id));
+  const from={kind:'free',...t.lngLatToPack(139.80,35.72),level:-1};
+  const to={kind:'free',...t.lngLatToPack(139.81,35.72),level:-1};
+  const r=await t.client.edit({op:'route',from,to,pis:[],single:false});
+  if(!r.ok)throw Error(JSON.stringify(r));
+  return t.world.peek().edges.filter(e=>!before.has(e.id)).map(e=>e.id);
+ });
+ await guest.waitForFunction(ids=>ids.every(id=>window.tw.world.peek().edges.some(e=>e.id===id)),planned);
+ const quote=await host.evaluate(company=>window.tw.client.query({what:'companyQuote',company}).then(d=>Array.from(d)),aid);
+ const theirs=await guest.evaluate(company=>window.tw.client.query({what:'companyQuote',company}).then(d=>Array.from(d)),bid);
+ assert(quote[0]>0);assert.equal(theirs.reduce((a,b)=>a+b,0),0);
+ assert.equal((await host.evaluate(edges=>window.tw.client.edit({op:'blueprintOff',edges,stations:[],off:true}),planned)).ok,true);
+ const offQuote=await host.evaluate(company=>window.tw.client.query({what:'companyQuote',company}).then(d=>Array.from(d)),aid);
+ assert.equal(offQuote.reduce((a,b)=>a+b,0),0);
+ await host.evaluate(edges=>window.tw.client.edit({op:'blueprintOff',edges,stations:[],off:false}),planned);
+ const construction=await host.evaluate(()=>window.tw.client.edit({op:'constructAll'}));assert.equal(construction.ok,true);
+ assert(Math.abs(construction.charge-quote.reduce((a,b)=>a+b,0))<1e-6);
+ await guest.evaluate(line=>{window.tw.selection.value={kind:'line',line:String(line)};},a.line);
+ assert(await guest.locator('#inspector fieldset[disabled]').count());
+ await guest.keyboard.press('b');assert.equal(await guest.locator('.tool-ferry').isDisabled(),true);
+ assert.equal(await guest.getByRole('button',{name:'元に戻す',exact:true}).isDisabled(),true);
+ console.log('PASS company quote isolation, disabled blueprint pricing, charged total and read-only opponent inspector');
  await host.evaluate(()=>window.tw.multiplayer.leaveMultiplayer());
  await guest.waitForFunction(()=>{const s=window.tw.multiplayer.multiplayer.peek();return s.room.host===s.self;});
  await host.evaluate(code=>window.tw.multiplayer.connectMultiplayer('Alpha',code),code);await ready(host);assert.equal(await own(host),aid);

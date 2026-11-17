@@ -2688,6 +2688,7 @@
   "multiplayer.status.connecting": "接続中…",
   "multiplayer.status.connected": "接続済み・全員がリアルタイムで建設できます",
   "multiplayer.status.disconnected": "切断されました・建設を停止しています",
+  "multiplayer.error.competitionStart": "会社対戦は設備のない新しいワールドから開始してください。",
   "multiplayer.error.game": "先にゲームを開いてください。",
   "multiplayer.error.connection": "接続が切れました。退出してローカルで続けるか、再参加してください。",
   "multiplayer.error.snapshot": "共有できません。セーブ形式と圧縮後 2 MB の上限を確認してください。",

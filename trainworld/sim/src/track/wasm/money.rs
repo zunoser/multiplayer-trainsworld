@@ -216,6 +216,20 @@ impl TrackApi {
         }
         out
     }
+    /// Infrastructure and additional vehicles for precisely the selected company's construction.
+    /// Trial construction restores the network and never spends cash or changes undo history.
+    pub fn company_construction_quote(&mut self, edges: &[u32], stations: &[u32], buses: &[u32], fleet: &[u32]) -> Vec<f64> {
+        if fleet.len() != FLEETS { return vec![]; }
+        let ops = self.construct_ops(edges, stations, buses);
+        if ops.is_empty() { return vec![0.0, 0.0]; }
+        match self.w.trial_with(Op::Batch(ops), cars_needed) {
+            Ok((result, need)) => {
+                let vehicles = (0..FLEETS).map(|k| need[k].saturating_sub(fleet[k]) as f64 * CAR_PRICES[k]).sum();
+                vec![result.charge, vehicles]
+            }
+            Err(_) => vec![],
+        }
+    }
     /// Each running line's share of the upkeep a game day, US$M, as `[line, share]` pairs, then
     /// `[-1, rest]` for the track and stations no running line uses (T-867). Each edge's upkeep is
     /// split between the lines on it by their trains a day, each station's between the lines
@@ -397,6 +411,22 @@ impl TrackApi {
 #[cfg(test)]
 mod company_tests {
     use super::*;
+    #[test]
+    fn company_quote_matches_selected_construction_without_mutating_world() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_route(&[0., 0., 0., 2000., 0., 0., 0., 8000., 2000., 0.], &[], 2, false), 0);
+        let before = a.save();
+        let cash = a.cash();
+        let quote = a.company_construction_quote(&[0], &[], &[], &[0; FLEETS]);
+        assert!(quote[0] > 0.0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.cash(), cash);
+        assert_eq!(a.construct(&[0], &[]), 0);
+        assert!((cash - a.cash() - quote.iter().sum::<f64>()).abs() < 1e-8);
+        assert!(a.blueprint_cost() > 0.0);
+    }
     #[test]
     fn company_assets_match_total_upkeep_and_keep_planned_ids() {
         let mut a = TrackApi::new(-73.985, 40.758, true);

@@ -1,3 +1,4 @@
+import { competing } from "../../game/companies";
 // The station panel's row of upgrades (T-1281): each icon a toggle, outlined when not built, dashed
 // while in the blueprint, filled when built. On a built station a click pays at once, as the
 // junction inspector's flyover does. The passage (the player's link, T-197) starts a pick of the
@@ -122,7 +123,7 @@ function BuildingButton({ s }: { s: StationInput }) {
     live.tools.building.begin(rect, null, s.id);
   };
   return (
-    <button class={"btn icon upgrade" + state} aria-label={t("stationUpgrades.building")} aria-pressed={drawing} data-tip={tip} onClick={click}>
+    <button class={"btn icon upgrade" + state} disabled={competing.value} aria-label={t("stationUpgrades.building")} aria-pressed={drawing} data-tip={tip} onClick={click}>
       <BuildingIcon />
     </button>
   );

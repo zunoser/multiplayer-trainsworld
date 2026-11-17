@@ -833,6 +833,19 @@ function setCompanyFleet(f: number[]) {
   api!.set_fleet(f[0]);api!.set_fleet_fast(f[1]);api!.set_fleet_bus(f[2]);api!.set_fleet_ferry(f[3]);api!.set_fleet_tram(f[4]);
 }
 
+function companyConstructionQuote(id: string): Float64Array {
+  const company = competition?.companies.find(c => c.id === id);
+  if (!company || !api) return new Float64Array();
+  const own = (kind: string, off: Uint32Array = new Uint32Array()) => new Uint32Array(
+    Object.entries(competition!.owners)
+      .filter(([key, owner]) => owner === id && key.startsWith(kind + ":"))
+      .map(([key]) => Number(key.split(":")[1])).filter(n => !off.includes(n)));
+  const other = companyFleet(id);
+  return Float64Array.from(api.company_construction_quote(
+    own("edge", api.off_edges()), own("node", api.off_stations()), own("line"),
+    new Uint32Array(company.fleet.map((n, i) => n + other[i]))));
+}
+
 type Kept = { ids?: Uint32Array; net: Uint8Array; cash: number; fleet: number; fleetFast: number; fleetBus: number; fleetFerry: number; fleetTram: number };
 let kept: Kept | null = null;
 function modelNow(a: TrackApi): Kept {
@@ -3803,8 +3816,11 @@ function applyInner(op: EditOp): Applied {
       return { r: a.set_station_name(op.node, op.name) };
     case "removeStation":
       return { r: a.remove_station(op.node) };
-    case "construct":
-      return { r: a.construct_with_buses(new Uint32Array(op.edges), new Uint32Array(op.stations), new Uint32Array(op.buses ?? [])) };
+    case "construct": {
+      const offEdges = new Set(op.enabledOnly ? a.off_edges() : []);
+      const offStations = new Set(op.enabledOnly ? a.off_stations() : []);
+      return { r: a.construct_with_buses(new Uint32Array(op.edges.filter(e => !offEdges.has(e))), new Uint32Array(op.stations.filter(n => !offStations.has(n))), new Uint32Array(op.buses ?? [])) };
+    }
     case "constructAll":
       return { r: a.construct_all() };
     case "blueprintOff":
@@ -4761,6 +4777,7 @@ async function handleMessage(msg: ToClock) {
       : q.what === "removal" ? new Float64Array(api.removal_lines(new Uint32Array(q.edges), new Uint32Array(q.stations)))
       : q.what === "busQuote" ? busQuoteLL(api, q.line, q.route)
       : q.what === "rebuildQuote" ? rebuildQuoteAnswer(q.edges, q.stations, q.level, q.kind, q.tracks)
+      : q.what === "companyQuote" ? companyConstructionQuote(q.company)
       : q.what === "blueprintQuote" ? Float64Array.from(api.blueprint_cost_items())
       : q.what === "blueprintPieces" ? Float64Array.from(api.blueprint_piece_costs())
       : q.what === "lineCost" ? new Float64Array([api.line_build_cost(q.line), api.line_train_cost(q.line)])

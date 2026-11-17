@@ -2690,6 +2690,7 @@
   "multiplayer.status.connecting": "Connecting…",
   "multiplayer.status.connected": "Connected · everyone can build in real time",
   "multiplayer.status.disconnected": "Disconnected · building paused",
+  "multiplayer.error.competitionStart": "Start company competition from an empty world.",
   "multiplayer.error.game": "Open a game before joining a room.",
   "multiplayer.error.connection": "Connection lost. Leave the room to keep playing locally, or join again.",
   "multiplayer.error.snapshot": "This world cannot be shared. Check its save format and the 2 MB limit.",

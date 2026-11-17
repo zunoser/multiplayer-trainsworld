@@ -1,3 +1,4 @@
+import { competing } from "../game/companies";
 // The Build tab: the tools and the blueprint quote. The track and station tools' options are on the
 // map while the tool is on (ToolBar.tsx, T-2282).
 
@@ -31,7 +32,7 @@ export function BuildTab() {
             <span class="key muted">{BUS_KEY.toUpperCase()}</span>
           </button>
           {/* T-2194: the ferry tool beside it, placing ports */}
-          <button class={"btn text tool-ferry" + (cur === "ferry" ? " on" : "")} data-tip={t("buildTab.ferryTip", { key: FERRY_KEY.toUpperCase() })}
+          <button class={"btn text tool-ferry" + (cur === "ferry" ? " on" : "")} data-tip={t("buildTab.ferryTip", { key: FERRY_KEY.toUpperCase() })} disabled={competing.value}
             onClick={() => (cur === "ferry" ? live.tools?.exit() : newFerryLine())}>
             <Icon.ferry />
             <span class="tool-label">{t("buildTab.ferry")}</span>

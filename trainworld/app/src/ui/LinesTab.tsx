@@ -1,3 +1,4 @@
+import { competing, ownsAsset } from "../game/companies";
 // The Lines tab: the list of lines with their riders, money and trains now.
 
 import { demandAt, lineSeconds } from "../game/clock";
@@ -293,7 +294,7 @@ export function LinesTab() {
     else if (p.leave) void edit({ op: "lineGroup", lines: [num], group: 0 });
   };
   const pointerDown = (e: PointerEvent, id: string) => {
-    if (e.button !== 0 || e.pointerType === "touch") return;
+    if (competing.value || e.button !== 0 || e.pointerType === "touch") return;
     if ((e.target as Element | null)?.closest?.("button, input")) return;
     const d: Drag = { id, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, on: false, over: null, part: "on" };
     const group = id.startsWith("g:");
@@ -350,7 +351,7 @@ export function LinesTab() {
             onBlur={(e) => { setRenamingLine(null); renameLine(l.id, e.currentTarget.value); }} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenamingLine(null); }} />
         ) : (
           // T-2786: a triple click renames (a double click snaps the camera)
-          <span class="grow line-name" onClick={(e) => { if (e.detail === 3) { e.stopPropagation(); setRenamingLine(l.id); } }}>{l.name}</span>
+          <span class="grow line-name" onClick={(e) => { if (e.detail === 3 && ownsAsset("line", l.num)) { e.stopPropagation(); setRenamingLine(l.id); } }}>{l.name}</span>
         )}
         {showCity && <span class="val muted w-city" data-tip={cityOf.get(l.id) ? t("linesTab.cityTip", { city: cityOf.get(l.id) }) : undefined}>{cityOf.get(l.id)}</span>}
         {st.status !== "running" ? (
@@ -405,7 +406,7 @@ export function LinesTab() {
         <span style={{ display: "flex", gap: "6px" }}>
           <button class="btn text" data-guide="line" data-tip={t("linesTab.newLineTip", { key: "N" })} onClick={newLine} disabled={creating}><Icon.plus />{t("linesTab.newLine")}<span class="key muted">N</span></button>
           <button class="btn icon new-bus" data-tip={t("linesTab.newBusTip", { key: "U" })} aria-label={t("linesTab.newBus")} onClick={() => newBusLine()}><Icon.bus /></button>
-          <button class="btn icon new-ferry" data-tip={t("linesTab.newFerryTip", { key: "O" })} aria-label={t("linesTab.newFerry")} onClick={() => newFerryLine()}><Icon.ferry /></button>
+          <button class="btn icon new-ferry" disabled={competing.value} data-tip={t("linesTab.newFerryTip", { key: "O" })} aria-label={t("linesTab.newFerry")} onClick={() => newFerryLine()}><Icon.ferry /></button>
         </span>
         <ScopeToggle />
       </div>

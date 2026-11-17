@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
@@ -6,7 +7,7 @@ const ORIGIN='https://game.test';
 const snap={save:gzipSync('fixture').toString('base64'),ids:[1,0,0,0,0,0,0,0,0]};
 const context={clock:100,cash:10000,fares:{base:1,perKm:1},ledger:[],rate:0};
 async function fixture(t){
- const mf=new Miniflare({modules:true,scriptPath:new URL('./src/index.mjs',import.meta.url).pathname,compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false});
+ const mf=new Miniflare({modules:true,scriptPath:fileURLToPath(new URL('./src/index.mjs',import.meta.url)),compatibilityDate:'2026-07-30',durableObjects:{ROOMS:{className:'RailwayRoom',useSQLite:true}},bindings:{ROOM_PASSWORD:'test-password'},cf:false});
  t.after(()=>mf.dispose());
  const login=await mf.dispatchFetch(ORIGIN+'/api/login',{method:'POST',headers:{Origin:ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({password:'test-password'})});
  const cookie=login.headers.get('Set-Cookie').split(';')[0];
@@ -114,10 +115,24 @@ test('competitive rooms keep companies across reconnects and reject opponent edi
   g.c.send({type:'command',company:hc,id:op.op,op});assert.equal((await g.c.next(m=>m.type==='error'&&m.id===op.op)).code,'ownership');
  }
  g.c.send({type:'command',id:'mine',op:{op:'constructAll'}});
- const own=await h.c.next(m=>m.type==='execute'&&m.id==='mine');assert.deepEqual(own.op,{op:'construct',edges:[],stations:[],buses:[]});
+ const own=await h.c.next(m=>m.type==='execute'&&m.id==='mine');assert.deepEqual(own.op,{op:'construct',edges:[],stations:[],buses:[],enabledOnly:true});
  h.c.ws.close(1000,'bye');await g.c.next(m=>m.type==='room'&&m.host===g.state.self);
  g.c.ws.close(1000,'bye');
  const returning=await f.join({companyKey:key});assert.equal(returning.state.company,hc);
  assert.equal(returning.state.competition.owners['edge:1'],hc);
  assert.equal(returning.state.competition.companies.length,2);
+});
+test('five companies remain reserved after disconnect and an existing company can return',async t=>{
+ const f=await fixture(t);
+ await f.host({mode:'versus',companyKey:'company-host-123456789012345678901234567890',context});
+ const keys=Array.from({length:4},(_,i)=>`company-guest-${i}-123456789012345678901234567890`);
+ let original;
+ for(const companyKey of keys){
+  const g=await f.join({companyKey});original??=g.state.company;
+  await new Promise(resolve=>{g.c.ws.addEventListener('close',resolve,{once:true});g.c.ws.close(1000,'bye');});
+ }
+ const sixth=await f.connect();sixth.send({type:'join',protocol:2,name:'Sixth',companyKey:'sixth-company-123456789012345678901234567890'});
+ assert.equal((await sixth.next(m=>m.type==='error')).code,'full');sixth.ws.close(1000,'bye');
+ const back=await f.join({companyKey:keys[0]});
+ assert.equal(back.state.company,original);assert.equal(back.state.competition.companies.length,5);
 });

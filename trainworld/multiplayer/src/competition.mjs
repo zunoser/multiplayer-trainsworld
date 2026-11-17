@@ -26,7 +26,7 @@ export function ownedOperation(op,company,owners){
  if(op.op==='link')return own('node',op.a)&&own('node',op.b)?op:null;
  if(op.op==='constructAll') {
   const ids=kind=>Object.entries(owners).filter(([key,owner])=>owner===company&&key.startsWith(kind+':')).map(([key])=>Number(key.split(':')[1]));
-  return {op:'construct',edges:ids('edge'),stations:ids('node'),buses:ids('line')};
+  return {op:'construct',edges:ids('edge'),stations:ids('node'),buses:ids('line'),enabledOnly:true};
  }
  return null;
 }

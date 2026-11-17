@@ -122,6 +122,11 @@ export async function loginMultiplayer(password: string) {
 export async function connectMultiplayer(name: string, code?: string, mode: "coop"|"versus" = "coop") {
   if(socket||cooperative.peek())return;
   if(!clockRunning()) {failure(new Error(errorText("game")));return;}
+  if (!code && mode === "versus") {
+    const { world } = await import("./world");
+    const w = world.peek();
+    if (!w || w.edges.length || w.save.stations.length || w.save.lines.length) { failure(new Error(errorText("competitionStart"))); return; }
+  }
   const mine=++generation;
   cooperative.value=true;cooperativeEditSink.value=command;
   const roomCode=code?normalizeRoomCode(code):createRoomCode();
