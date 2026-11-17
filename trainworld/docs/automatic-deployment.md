@@ -2,7 +2,7 @@
 
 The deployment workflow validates pull requests and deploys pushes to `main` to the existing `multiplayer-trainsworld` Worker at https://trains.aomona.me/. Pull requests never receive deployment credentials. No preview URL or workers.dev endpoint is enabled.
 
-Each run installs locked npm dependencies, builds both WASM modules with wasm-pack 0.15.0, checks TypeScript, bundles the frontend and Worker, and tests the packaged HTML, JavaScript, CSS and WASM MIME types. The Worker bundler includes imported modules, including the competition module when that feature is merged.
+Each run installs locked npm dependencies, builds both WASM modules with wasm-pack 0.15.0, checks TypeScript, bundles the frontend and Worker, and tests the packaged HTML, JavaScript, CSS and WASM MIME types. The Worker bundler includes imported modules, including the competition module when that feature is merged. The production smoke check retries the complete HTML, asset and health check every two seconds, up to 31 attempts, so a transient asset 404 immediately after upload can settle. Persistent missing assets and incorrect MIME types still fail the run.
 
 The configuration retains the `ASSETS`, `ROOMS`, `LOGIN_LIMIT` and `ROOM_PASSWORD` bindings, the SQLite `RailwayRoom` export, the 50 ms CPU limit and disabled Workers cache. The cf uploader preserves existing secret bindings. Deployment disables resource provisioning, so missing existing resources cause failure rather than creating a replacement namespace. It does not reset room data or change the shared password.
 
