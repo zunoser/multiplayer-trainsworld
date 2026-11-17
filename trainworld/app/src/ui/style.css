@@ -2016,3 +2016,8 @@ html.ui-hidden .ui-hint.on { display: block; }
 @media (max-width: 600px) { .room-bar { gap: 6px 8px; }.room-chat-hint { display: none; }.room-members { flex-basis: 100%; order: 2; }.room-status { display: none; } }
 
 #multiplayer-lobby-root { position: fixed; inset: 0; z-index: 10000; }
+
+.company-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.company-table th, .company-table td { padding: 6px 4px; border-bottom: 1px solid var(--rule); text-align: left; }
+.company-table td.num { text-align: right; }
+.company-table tr[aria-current="true"] { background: var(--tint); }

@@ -10,6 +10,7 @@ export function RoomBar() {
   if(s.status==="offline"||s.status==="connecting")return null;
   async function copy(value:string){try{await navigator.clipboard.writeText(value);setCopied(true);setTimeout(()=>setCopied(false),1800);}catch{setCopied(false);}}
   return <section class="room-bar" aria-label={t("lobby.room")}>
+    {s.room?.mode==="versus"&&<span>{t("competition.versus")}</span>}
     <span class={"room-status"+(s.status==="connected"?" online":"")}><i />{t(s.status==="connected"?"lobby.connected":"multiplayer.status.disconnected")}</span>
     <div class="room-code-box"><span>{t("lobby.code")}</span><button class="room-code-value" aria-label={t("lobby.copyCode")} data-tip={t("lobby.copyCode")} onClick={()=>void copy(s.code)}>{formattedRoomCode(s.code)}<Icon.copy /></button></div>
     <button class="btn text room-invite" onClick={()=>void copy(roomInvite())}><Icon.link />{t(copied?"multiplayer.copied":"lobby.invite")}</button>

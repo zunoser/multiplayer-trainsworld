@@ -26,6 +26,7 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
   const [mode,setMode]=useState<"host"|"join">(invited?"join":"host");
   const [name,setName]=useState(()=>{try{return localStorage.getItem("tw-player-name")??"";}catch{return "";}});
   const [password,setPassword]=useState("");
+  const [gameMode,setGameMode]=useState<"coop"|"versus">("coop");
   const [code,setCode]=useState(invited);
   const [busy,setBusy]=useState(false);
   const [checked,setChecked]=useState(false);
@@ -51,9 +52,9 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
       if(!multiplayer.peek().authenticated)throw new Error(t("multiplayer.error.password"));
       if(multiplayer.peek().status!=="offline")await leaveMultiplayer();
       try{localStorage.setItem("tw-player-name",name.trim());}catch{}
-      if(!started.current){started.current=true;choosing.value=false;document.documentElement.classList.remove("choosing");start({newGame:true,newSlot:t("multiplayer.world"),game:{mode:"sandbox",start:"tyo",rightHand:false}});}
+      if(!started.current){started.current=true;choosing.value=false;document.documentElement.classList.remove("choosing");start({newGame:true,newSlot:t("multiplayer.world"),game:{mode:gameMode==="versus"?"normal":"sandbox",start:"tyo",rightHand:false}});}
       await waitUntil(()=>!!world.value&&clockRunning());
-      await connectMultiplayer(name.trim(),mode==="join"?normalizeRoomCode(code):undefined);
+      await connectMultiplayer(name.trim(),mode==="join"?normalizeRoomCode(code):undefined,gameMode);
       let claimed=false;
       await waitUntil(()=>{
         const current=multiplayer.value;
@@ -81,11 +82,12 @@ function Lobby({start,done}:{start:(choice:GameChoice)=>void;done:()=>void}) {
             <button type="button" role="tab" aria-selected={mode==="join"} class={"btn text"+(mode==="join"?" on":"")} disabled={busy} onClick={()=>{setMode("join");setError("");}}>{t("lobby.join")}</button>
           </div>
           <form class="lobby-form" onSubmit={submit}>
+            {mode==="host"&&<label>{t("competition.mode")}<select value={gameMode} disabled={busy} onChange={e=>setGameMode(e.currentTarget.value as "coop"|"versus")}><option value="coop">{t("competition.coop")}</option><option value="versus">{t("competition.versus")}</option></select></label>}
             <label>{t("multiplayer.name")}<input required maxLength={40} autoComplete="nickname" value={name} disabled={busy} onInput={e=>setName(e.currentTarget.value)} /></label>
             {mode==="join"&&<label>{t("lobby.code")}<input class="lobby-code" required autoCapitalize="characters" autoComplete="off" spellcheck={false} placeholder="ABCDE-FG234" value={code} disabled={busy} onInput={e=>setCode(e.currentTarget.value)} /></label>}
             {error&&<p class="lobby-error" role="alert">{error}</p>}
             <button class="btn text lobby-submit" type="submit" disabled={busy}>{busy?t("lobby.preparing"):t(mode==="host"?"lobby.host":"lobby.joinAction")}</button>
-            {mode==="host"&&<p class="muted small lobby-form-note">{t("lobby.hostNote")}</p>}
+            {mode==="host"&&<p class="muted small lobby-form-note">{t(gameMode==="versus"?"competition.startingFunds":"lobby.hostNote")}</p>}
           </form>
         </>}
       <footer><a href="https://github.com/aomona/multiplayer-trainsworld" target="_blank" rel="noopener">{t("multiplayer.source")}</a><span>·</span><a href="privacy.html">{t("lobby.privacy")}</a><span>·</span><a href="terms.html">{t("lobby.terms")}</a></footer>

@@ -1,3 +1,4 @@
+import { companies, myCompanyId } from "./companies";
 import { askBeforeLeaving } from "./saveSafety";
 import { effect, signal } from "@preact/signals";
 import { clock, SPEEDS } from "./clock";
@@ -21,10 +22,10 @@ function receiveCursor(id: string, name: string, cursor: {lng:number;lat:number;
   else next.set(id,{id,name,...cursor,textAt:previous?.text===cursor.text?previous.textAt:Date.now()});
   sharedCursors.value=next;
 }
-type Member = { id: string; name: string; ready: boolean };
-type Room = { revision: number; host: string | null; members: Member[] };
+type Member = { id: string; name: string; ready: boolean; company?: string };
+type Room = { revision: number; host: string | null; members: Member[]; mode?: "coop"|"versus" };
 type Snapshot = { save: string; ids: number[] };
-type Event = CooperativeResult & { type: "commit"; revision: number; actor: string; id: string; op: EditOp };
+type Event = CooperativeResult & { type: "commit"; revision: number; actor: string; id: string; op: EditOp; company?: string };
 type State = { status: "offline" | "connecting" | "connected" | "disconnected"; self: string; code: string; room: Room | null; busy: boolean; error: string; authenticated: boolean };
 export const multiplayer = signal<State>({ status: "offline", self: "", code: "", room: null, busy: false, error: "", authenticated: false });
 let socket: WebSocket | null = null, generation = 0, applied = 0;
@@ -74,6 +75,7 @@ async function command(op: EditOp): Promise<EditAnswer> {
 }
 function sameAnswer(a: CooperativeResult["answer"], b: CooperativeResult["answer"]) { return a.ok===b.ok&&a.line===b.line&&a.node===b.node&&a.skipped===b.skipped; }
 function takeTime(c: CooperativeContext) {
+  if(c.competition)companies.value=c.competition;
   if(cooperativeAuthority.peek()) return;
   takeCooperativeTime(c);
   clock.set(c.clock);
@@ -84,11 +86,12 @@ async function applyEvent(e: Event) {
   if(e.revision<=applied)return;
   if(e.revision!==applied+1)throw new Error(errorText("revision"));
   if(!executed.delete(e.id)) {
-    const local=await runCooperativeCommand(e.op,e.before);
+    const local=await runCooperativeCommand(e.op,e.before,e.company);
     if(!sameAnswer(local.answer,e.answer)) throw new Error(errorText("diverged"));
     takeCooperativeTime(e.after);
   }
   applied=e.revision;
+  if(e.after.competition)companies.value=e.after.competition;
   const s=multiplayer.peek();
   if(s.room)update({room:{...s.room,revision:applied}});
   if(e.actor===s.self) { const p=pending.get(e.id);pending.delete(e.id);if(p){clearTimeout(p.timer);p.done(e.answer);} }
@@ -116,7 +119,7 @@ export async function checkMultiplayerSession() {
 export async function loginMultiplayer(password: string) {
   try { const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});if(!r.ok)throw new Error(errorText(r.status===429?"rate":"password"));update({authenticated:true,error:""}); } catch(error){failure(error);}
 }
-export async function connectMultiplayer(name: string, code?: string) {
+export async function connectMultiplayer(name: string, code?: string, mode: "coop"|"versus" = "coop") {
   if(socket||cooperative.peek())return;
   if(!clockRunning()) {failure(new Error(errorText("game")));return;}
   const mine=++generation;
@@ -127,10 +130,14 @@ export async function connectMultiplayer(name: string, code?: string) {
     const initial=code?undefined:await snapshot();
     if(mine!==generation)return;
     const url=new URL("/multiplayer",location.href);url.protocol=location.protocol==="https:"?"wss:":"ws:";url.searchParams.set("room",roomCode);
+    const context=initial?await readCooperativeContext():undefined;
     const ws=new WebSocket(url);socket=ws;
     let queue=Promise.resolve(), chunks:string[]=[], expected=0;
     const timeout=setTimeout(()=>{if(multiplayer.peek().status==="connecting")ws.close();},120_000);
-    ws.onopen=()=>send({type:code?"join":"create",protocol:2,name,...(initial?{snapshot:initial}:{})});
+    const keyName="tw-company:"+roomCode;
+    let companyKey=localStorage.getItem(keyName);
+    if(!companyKey){companyKey=crypto.randomUUID();localStorage.setItem(keyName,companyKey);}
+    ws.onopen=()=>send({type:code?"join":"create",protocol:2,name,mode,companyKey,...(context?{context}:{}),...(initial?{snapshot:initial}:{})});
     const receive=async(m: Record<string, any>)=>{
       if(mine!==generation)return;
       if(m.type==="bootstrap") {expected=m.parts;chunks=[];if(!Number.isInteger(expected)||expected<1||expected>1024)throw new Error(errorText("snapshot"));return;}
@@ -146,14 +153,15 @@ export async function connectMultiplayer(name: string, code?: string) {
         return;
       }
       if(m.type==="welcome") {
-        update({self:m.self,room:{revision:m.revision,host:m.host,members:m.members},busy:true});
+        myCompanyId.value=m.company??null;companies.value=m.competition??null;
+        update({self:m.self,room:{revision:m.revision,host:m.host,members:m.members,mode:m.mode},busy:true});
         const bytes=await copyFromShare(decode(m.snapshot.save),"coop:"+roomCode);
         loading=applyCooperativeSave(bytes,true,new Uint32Array(m.snapshot.ids));
         try{await loading;}finally{loading=null;}
         if(mine!==generation)return;
         applied=m.baseRevision;
         for(const e of m.events)await applyEvent(e);
-        update({status:"connected",busy:false,room:{revision:applied,host:m.host,members:m.members}});
+        update({status:"connected",busy:false,room:{revision:applied,host:m.host,members:m.members,mode:m.mode}});
         if(m.time)takeTime(m.time);
         send({type:"ready",revision:applied});
         if(new URLSearchParams(location.search).get("debug")!=="1")history.replaceState(null,"",roomInvite());
@@ -161,7 +169,8 @@ export async function connectMultiplayer(name: string, code?: string) {
       }
       if(m.type==="catchup") {for(const e of m.events)await applyEvent(e);send({type:"ready",revision:applied});return;}
       if(m.type==="room") {
-        update({room:{revision:m.revision,host:m.host,members:m.members}});
+        if(m.competition)companies.value=m.competition;
+        update({room:{revision:m.revision,host:m.host,members:m.members,mode:m.mode}});
         const members = new Set(m.members.map((member: Member)=>member.id));
         sharedCursors.value=new Map([...sharedCursors.peek()].filter(([id])=>members.has(id)));
         for(const member of m.members)if(member.cursor)receiveCursor(member.id,member.name,member.cursor);
@@ -174,7 +183,13 @@ export async function connectMultiplayer(name: string, code?: string) {
         if(m.revision!==applied)throw new Error(errorText("revision"));
         executing=true;
         try {
-          const result=await runCooperativeCommand(m.op);
+          let context: CooperativeContext | undefined;
+          if(m.competition) {
+            context=await readCooperativeContext();
+            const local=context.competition;
+            context.competition={...m.competition,companies:m.competition.companies.map((c: import("../workers/protocol").Company)=>local?.companies.find(own=>own.id===c.id)??c)};
+          }
+          const result=await runCooperativeCommand(m.op,context,m.company);
           executed.add(m.id);
           const checkpoint=m.checkpoint?await snapshot():undefined;
           if(mine===generation)send({type:"result",id:m.id,actor:m.actor,result,...(checkpoint?{snapshot:checkpoint}:{})});
@@ -194,6 +209,7 @@ export function claimBuilder() {try{send({type:"claim"});}catch(error){failure(e
 export async function leaveMultiplayer() {
   const mine=++generation;socket?.close();socket=null;rejectPending();
   update({busy:true});if(loading)await loading.catch(()=>{});if(mine!==generation)return;
+  companies.value=null;myCompanyId.value=null;
   applied=0;executed.clear();sharedCursors.value=new Map();cursorPending=null;cursorHidden=true;cursorDirty=false;cooperative.value=false;cooperativeEditSink.value=null;clock.setRunning(false);
   update({status:"offline",self:"",room:null,busy:false,error:"",code:""});
 }
@@ -209,3 +225,5 @@ setInterval(()=>{
   cursorDirty=false;
   send(cursorHidden?{type:"cursor",hidden:true}:{type:"cursor",...cursorPending});
 },100);
+
+export { readCooperativeContext };

@@ -2747,5 +2747,16 @@
   "lobby.backup": "セーブをダウンロード",
   "lobby.leave": "退出",
   "lobby.unlock": "入る",
-  "lobby.checking": "確認中…"
+  "lobby.checking": "確認中…",
+  "competition.mode": "遊び方",
+  "competition.coop": "協力プレイ",
+  "competition.versus": "会社対戦",
+  "competition.startingFunds": "東京から開始・各社の開始資金は100億ドル",
+  "competition.standings": "会社ランキング",
+  "competition.company": "会社",
+  "competition.cash": "資金",
+  "competition.profit": "営業利益",
+  "competition.profitNote": "営業利益は運賃収入 − 運行費 − 維持費の累計です。",
+  "multiplayer.error.ownership": "他社の設備は編集できません。この操作は自社の線路・駅・路線で行ってください。",
+  "multiplayer.error.company": "会社の情報を確認できません。招待リンクから入り直してください。"
 }

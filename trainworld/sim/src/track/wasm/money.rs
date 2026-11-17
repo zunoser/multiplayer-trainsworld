@@ -182,6 +182,40 @@ impl TrackApi {
         let ports = port_count * port_upkeep();
         vec![track + stations + buses + ports, track, stations, km, count, buses, bus_km, ports, port_count]
     }
+    /// Company accounting: every live asset as [kind, id, upkeep/day US$M].
+    /// 0 track, 1 node (including planned stations), 2 line.
+    pub fn company_assets(&self) -> Vec<f64> {
+        let n = &self.w.net;
+        let mut out = vec![];
+        for e in 0..n.edge_alive.len() {
+            if n.edge_ok(e as u32) {
+                out.extend([0.0, e as f64, edge_upkeep(n, e).unwrap_or(0.0)]);
+            }
+        }
+        for i in 0..n.node_alive.len() {
+            if !n.node_ok(i as u32) { continue; }
+            let up = if upkept_station(n, i) { station_upkeep(n, i) }
+                else if upkept_port(n, i) { port_upkeep() } else { 0.0 };
+            out.extend([1.0, i as f64, up]);
+        }
+        for i in 0..self.w.svc.lines.len() {
+            if n.line_ok(i as u32) {
+                out.extend([2.0, i as f64, bus_upkeep(n, i as u32).unwrap_or(0.0)]);
+            }
+        }
+        out
+    }
+    /// Required vehicles of each kind for precisely these companies' lines.
+    pub fn company_fleet(&self, lines: &[u32]) -> Vec<u32> {
+        let mut out = vec![0; FLEETS];
+        for &id in lines {
+            let i = id as usize;
+            if let Some(l) = self.w.svc.lines.get(i).filter(|l| l.ok && l.running) {
+                out[fleet_kind(&self.w.net, i)] += l.trains.iter().copied().max().unwrap_or(0) * l.cars;
+            }
+        }
+        out
+    }
     /// Each running line's share of the upkeep a game day, US$M, as `[line, share]` pairs, then
     /// `[-1, rest]` for the track and stations no running line uses (T-867). Each edge's upkeep is
     /// split between the lines on it by their trains a day, each station's between the lines
@@ -358,4 +392,31 @@ impl TrackApi {
         rows
     }
 
+}
+
+#[cfg(test)]
+mod company_tests {
+    use super::*;
+    #[test]
+    fn company_assets_match_total_upkeep_and_keep_planned_ids() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        let planned = a.company_assets();
+        assert!(!planned.is_empty());
+        assert!(planned.chunks_exact(3).all(|row| row[2] == 0.));
+        assert_eq!(a.construct_all(), 0);
+        let total: f64 = a.company_assets().chunks_exact(3).map(|row| row[2]).sum();
+        assert!(total > 0.);
+        assert!((total - a.upkeep()[0]).abs() < 1e-9);
+        assert_eq!(a.company_fleet(&[]), vec![0; 5]);
+        for id in [0, 1] {
+            assert_eq!(a.add_station(1, id, 0., 0., 200, format!("S{id}")), 0);
+        }
+        let line = a.new_line_id();
+        assert_eq!(a.set_line_with_trains(line, &[0, 1], 2, 1, 0, 30., 180., 5, 0, "Company".into()), 0);
+        assert_eq!(a.construct_all(), 0);
+        assert!(a.company_fleet(&[line])[0] > 0);
+        assert_eq!(a.company_fleet(&[line])[0], a.cars_needed());
+    }
 }

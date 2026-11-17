@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { newCompany, ownedOperation } from './competition.mjs';
 const VERSION = 2;
 const MAX_SAVE = 2 << 20, MAX_PACKET = 8 << 20, MAX_EVENT = 256 << 10;
 const enc = new TextEncoder();
@@ -74,7 +75,7 @@ export class RailwayRoom extends DurableObject {
   put(key,value) { this.sql.exec('INSERT OR REPLACE INTO meta VALUES (?,?)',key,JSON.stringify(value)); }
   peers() { return this.ctx.getWebSockets().filter(ws=>ws.readyState===1 && ws.deserializeAttachment()?.name).sort((x,y)=>(this.member(x).joined-this.member(y).joined)||this.member(x).id.localeCompare(this.member(y).id)); }
   member(ws) { return ws.deserializeAttachment(); }
-  state() { return {revision:this.get('revision',0),host:this.get('host'),members:this.peers().map(ws=>{const a=this.member(ws);return {id:a.id,name:a.name,ready:a.ready,...(a.cursor?{cursor:a.cursor}:{})};})}; }
+  state() { return {revision:this.get('revision',0),host:this.get('host'),mode:this.get('mode','coop'),competition:this.get('competition'),members:this.peers().map(ws=>{const a=this.member(ws);return {id:a.id,name:a.name,ready:a.ready,company:a.company??null,...(a.cursor?{cursor:a.cursor}:{})};})}; }
   send(ws, value) { try { ws.send(JSON.stringify(value)); } catch { try { ws.close(1013,'Slow connection'); } catch {} } }
   broadcast(value) { for(const ws of this.peers()) this.send(ws,value); }
   presence() { this.broadcast({type:'room',...this.state()}); }
@@ -86,7 +87,7 @@ export class RailwayRoom extends DurableObject {
     this.sql.exec('DELETE FROM events WHERE revision<=?',revision);
   }
   bootstrap(ws) {
-    const text=JSON.stringify({type:'welcome',...this.state(),self:this.member(ws).id,baseRevision:this.get('baseRevision',0),snapshot:JSON.parse(this.sql.exec('SELECT value FROM checkpoint ORDER BY part').toArray().map(r=>r.value).join('')),events:this.sql.exec('SELECT value FROM events ORDER BY revision').toArray().map(r=>JSON.parse(r.value)),time:this.get('time')});
+    const text=JSON.stringify({type:'welcome',...this.state(),self:this.member(ws).id,company:this.member(ws).company??null,baseRevision:this.get('baseRevision',0),snapshot:JSON.parse(this.sql.exec('SELECT value FROM checkpoint ORDER BY part').toArray().map(r=>r.value).join('')),events:this.sql.exec('SELECT value FROM events ORDER BY revision').toArray().map(r=>JSON.parse(r.value)),time:this.get('time')});
     const parts=Math.ceil(text.length/64_000);
     this.send(ws,{type:'bootstrap',parts});
     for(let i=0;i<parts;i++) this.send(ws,{type:'chunk',index:i,data:text.slice(i*64_000,(i+1)*64_000)});
@@ -108,11 +109,33 @@ export class RailwayRoom extends DurableObject {
     if(!a.name) {
       if(m.protocol!==VERSION) {reject('version');return;}
       if(typeof m.name!=='string'||!m.name.trim()||m.name.trim().length>40) {reject('name');return;}
+      let companyKey=null;
+      if(m.mode==='versus'||this.get('mode')==='versus') {
+        if(typeof m.companyKey!=='string'||!/^[-a-zA-Z0-9]{32,80}$/.test(m.companyKey)) {reject('company');return;}
+        companyKey=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(m.companyKey))),b=>b.toString(16).padStart(2,'0')).join('');
+      }
       if(m.type==='create') {
         if(this.get('revision',0)) {reject('exists');return;}
+        if(m.mode==='versus'&&(!m.context||!validTree(m.context))) {reject('message');return;}
         if(!validSnapshot(m.snapshot)) {reject('snapshot');return;}
-        this.ctx.storage.transactionSync(()=>{this.saveCheckpoint(m.snapshot,1);this.put('revision',1);this.put('host',a.id);});
+        this.ctx.storage.transactionSync(()=>{this.saveCheckpoint(m.snapshot,1);this.put('revision',1);this.put('host',a.id);this.put('mode',m.mode==='versus'?'versus':'coop');});
       } else if(m.type!=='join'||!this.get('revision',0)) {reject('missing');return;}
+      if(this.get('mode')==='versus') {
+        let competition=this.get('competition',{companies:[],owners:{}});
+        const credentials=this.get('companyCredentials',{});
+        let id=credentials[companyKey];
+        if(!id) {
+          if(competition.companies.length>=5) {reject('full');return;}
+          id=token();credentials[companyKey]=id;
+          competition.companies.push(newCompany(id,m.name.trim()));
+          this.put('companyCredentials',credentials);
+        }
+        a.company=id;this.put('competition',competition);
+        if(m.type==='create') {
+          if(!m.context||!validTree(m.context)) {reject('message');return;}
+          this.put('time',{...m.context,competition});
+        }
+      }
       a.name=m.name.trim();a.joined=Date.now(); ws.serializeAttachment(a);
       await this.ctx.storage.setAlarm(Date.now()+7*86400_000);
       this.bootstrap(ws); this.presence(); return;
@@ -139,6 +162,7 @@ export class RailwayRoom extends DurableObject {
       a.tokens=Math.min(20,a.tokens+(Date.now()-a.at)/1000*5);a.at=Date.now();
       if(a.tokens<1) {reject('rate',m.id);return;} a.tokens--;ws.serializeAttachment(a);
       if(typeof m.id!=='string'||m.id.length>60||!m.op||!opNames.has(m.op.op)||JSON.stringify(m.op).length>64_000||!validTree(m.op)) {reject('message',m.id);return;}
+      if(this.get('mode')==='versus'&&!ownedOperation(m.op,a.company,this.get('competition').owners)) {reject('ownership',m.id);return;}
       if(this.sql.exec('SELECT count(*) AS n FROM requests').one().n>=50) {reject('busy',m.id);return;}
       this.sql.exec('INSERT OR IGNORE INTO requests(actor,id,op) VALUES (?,?,?)',a.id,m.id,JSON.stringify(m.op));this.pump();return;
     }
@@ -148,10 +172,12 @@ export class RailwayRoom extends DurableObject {
       if(!m.result?.answer||!validTree(m.result)||JSON.stringify(m.result).length>MAX_EVENT) {ws.close(1008,'Invalid result');return;}
       const revision=this.get('revision')+1;
       if(m.snapshot&&!validSnapshot(m.snapshot)) {ws.close(1008,'Invalid checkpoint');return;}
-      const event={type:'commit',revision,actor:p.actor,id:p.id,op:p.op,...m.result};
+      if(this.get('mode')==='versus'&&(!m.result.after.competition||!validTree(m.result.after.competition))) {reject('company');return;}
+      if(this.get('mode')==='versus')m.result.after.competition=this.mergeCompetition(m.result.after.competition,true);
+      const event={type:'commit',revision,actor:p.actor,id:p.id,op:p.op,...(p.company?{company:p.company}:{}),...m.result};
       this.ctx.storage.transactionSync(()=>{
         this.sql.exec('INSERT INTO events VALUES (?,?)',revision,JSON.stringify(event));
-        this.put('revision',revision);this.put('time',m.result.after);this.put('pending',null);
+        this.put('revision',revision);this.put('time',m.result.after);if(m.result.after.competition)this.put('competition',m.result.after.competition);this.put('pending',null);
         this.sql.exec('DELETE FROM requests WHERE seq=?',p.seq);
         if(m.snapshot) this.saveCheckpoint(m.snapshot,revision);
       });
@@ -161,7 +187,8 @@ export class RailwayRoom extends DurableObject {
       if(a.id!==this.get('host')||!a.ready||this.get('pending')||m.revision!==this.get('revision')) return;
       const last=this.get('timeAt',0);if(Date.now()-last<800)return;
       if(!m.context||!validTree(m.context)||JSON.stringify(m.context).length>MAX_EVENT)return;
-      this.put('timeAt',Date.now());this.put('time',m.context);
+      if(this.get('mode')==='versus')m.context.competition=this.mergeCompetition(m.context.competition);
+      this.put('timeAt',Date.now());this.put('time',m.context);if(this.get('mode')==='versus'&&m.context.competition)this.put('competition',m.context.competition);
       this.broadcast({type:'time',revision:this.get('revision'),context:m.context});return;
     }
     if(m.type==='claim') {
@@ -176,9 +203,25 @@ export class RailwayRoom extends DurableObject {
     if(!host)return;
     const row=this.sql.exec('SELECT * FROM requests ORDER BY seq LIMIT 1').toArray()[0];
     if(!row)return;
-    const pending={seq:row.seq,id:row.id,actor:row.actor,op:JSON.parse(row.op),at:Date.now()};
+    let op=JSON.parse(row.op),company=null;
+    if(this.get('mode')==='versus') {
+      const actor=this.peers().find(ws=>this.member(ws).id===row.actor);
+      company=actor&&this.member(actor).company;
+      op=company&&ownedOperation(op,company,this.get('competition').owners);
+      if(!op) {
+        this.sql.exec('DELETE FROM requests WHERE seq=?',row.seq);
+        if(actor)this.send(actor,{type:'error',code:'ownership',id:row.id});
+        this.pump();return;
+      }
+    }
+    const pending={seq:row.seq,id:row.id,actor:row.actor,op,...(company?{company}:{}),at:Date.now()};
     this.put('pending',pending);
-    this.send(host,{type:'execute',...pending,revision:this.get('revision'),checkpoint:this.get('revision')-this.get('baseRevision',0)>=99});
+    this.send(host,{type:'execute',...pending,revision:this.get('revision'),competition:this.get('competition'),checkpoint:this.get('revision')-this.get('baseRevision',0)>=99});
+  }
+  mergeCompetition(incoming, owners=false) {
+    const stored=this.get('competition');
+    if(!stored||!incoming||!Array.isArray(incoming.companies))return stored;
+    return {companies:stored.companies.map(c=>incoming.companies.find(next=>next.id===c.id)??c),owners:owners?incoming.owners:stored.owners};
   }
   electHost() {
     if(this.get('host'))return;

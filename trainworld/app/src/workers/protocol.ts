@@ -196,7 +196,9 @@ export type EditOp =
   | { op: "undo" }
   | { op: "redo" };
 
-export type CooperativeContext = Pick<SaveHeader, "clock" | "cash" | "loan" | "loanPay" | "loanDays" | "fleet" | "fleetFast" | "fleetBus" | "fleetFerry" | "fleetTram" | "fares" | "ledger" | "hours" | "regions"> & { rate: number };
+export type Company = { id: string; name: string; cash: number; revenue: number; running: number; upkeep: number; spent: number; fleet: number[] };
+export type Competition = { companies: Company[]; owners: Record<string, string> };
+export type CooperativeContext = Pick<SaveHeader, "clock" | "cash" | "loan" | "loanPay" | "loanDays" | "fleet" | "fleetFast" | "fleetBus" | "fleetFerry" | "fleetTram" | "fares" | "ledger" | "hours" | "regions"> & { rate: number; competition?: Competition };
 export type CooperativeAnswer = { ok: boolean; issues: string[]; charge: number; line?: number; node?: number; skipped?: number };
 export type CooperativeResult = { answer: CooperativeAnswer; before: CooperativeContext; after: CooperativeContext };
 
@@ -321,7 +323,7 @@ export type ToClock =
   | { kind: "import"; bytes: ArrayBuffer; name?: string }
   /** Checked cooperative checkpoint, in a transient view that cannot overwrite a local game. */
   | { kind: "coopSnapshot"; bytes: Uint8Array; first: boolean; name: string; ids?: Uint32Array }
-  | { kind: "coopCommand"; seq: number; op: EditOp; context?: CooperativeContext }
+  | { kind: "coopCommand"; seq: number; op: EditOp; context?: CooperativeContext; company?: string }
   | { kind: "coopRead"; seq: number }
   | { kind: "coopTime"; context: CooperativeContext }
   | { kind: "coopExport"; seq: number }

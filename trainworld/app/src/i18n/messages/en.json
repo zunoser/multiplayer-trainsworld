@@ -2749,5 +2749,16 @@
   "lobby.backup": "Download a backup",
   "lobby.leave": "Leave",
   "lobby.unlock": "Continue",
-  "lobby.checking": "Checking…"
+  "lobby.checking": "Checking…",
+  "competition.mode": "Game mode",
+  "competition.coop": "Cooperative",
+  "competition.versus": "Competing companies",
+  "competition.startingFunds": "Start in Tokyo · $10 billion per company",
+  "competition.standings": "Company standings",
+  "competition.company": "Company",
+  "competition.cash": "Cash",
+  "competition.profit": "Operating profit",
+  "competition.profitNote": "Cumulative fares minus running costs and maintenance.",
+  "multiplayer.error.ownership": "You can only edit your own tracks, stations and lines. This operation is unavailable for other companies.",
+  "multiplayer.error.company": "Company details are unavailable. Rejoin using the invite link."
 }

@@ -1,3 +1,4 @@
+import { myCompany } from "../game/companies";
 import { RoomBar } from "./RoomBar";
 import { cooperative, cooperativeAuthority } from "../game/multiplayerGate";
 // Top bar: city (or the world, zoomed far out), the mode split (the goal number: the bar and the
@@ -177,6 +178,8 @@ export function MapSky() {
 /** T-284: its own component, re-rendered as fares land (several times a wall second while the clock
  * runs) without the rest of the top bar. */
 function Cash() {
+  const company=myCompany.value;
+  if(company)return <div class="cash num" data-tip={company.name}>{moneyCash(company.cash*1e6)}</div>;
   const live = liveMoney.value, m = moneyState.value;
   const today = live.today;
   const tip = today ? t("topBar.cashTip", { fares: withFullSymbol(money(today.fares * 1e6)), running: withFullSymbol(money(-today.running * 1e6)), upkeep: withFullSymbol(money(-(today.upkeep ?? 0) * 1e6)) }) : undefined;

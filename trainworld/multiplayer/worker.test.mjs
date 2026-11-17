@@ -18,8 +18,8 @@ async function fixture(t){
   ws.addEventListener('message',e=>{if(e.data==='pong')return;const m=JSON.parse(e.data);if(m.type==='bootstrap'){parts=m.parts;chunks=[];}else if(m.type==='chunk'){chunks.push(m.data);if(chunks.length===parts)deliver(JSON.parse(chunks.join('')));}else deliver(m);});
   return {ws,send:m=>ws.send(JSON.stringify(m)),next(match){const i=messages.findIndex(match);if(i>=0)return Promise.resolve(messages.splice(i,1)[0]);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Message timeout')),4000);waiters.push({match,resolve,timer});});}};
  }
- async function host(){const c=await connect();c.send({type:'create',protocol:2,name:'Host',snapshot:snap});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state};}
- async function join(){const c=await connect();c.send({type:'join',protocol:2,name:'Guest'});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});const readyState=await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state,readyState};}
+ async function host(options={}){const c=await connect();c.send({type:'create',protocol:2,name:'Host',snapshot:snap,...options});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state};}
+ async function join(options={}){const c=await connect();c.send({type:'join',protocol:2,name:'Guest',...options});const state=await c.next(m=>m.type==='welcome');c.send({type:'ready',revision:state.revision});const readyState=await c.next(m=>m.type==='room'&&m.members.some(p=>p.id===state.self&&p.ready));return {c,state,readyState};}
  const result=(request,ok=true)=>({type:'result',id:request.id,actor:request.actor,result:{answer:{ok,issues:[],charge:0},before:context,after:context}});
  return {mf,cookie,connect,host,join,result};
 }
@@ -93,4 +93,31 @@ test('handover preserves the running clock and retries an unconfirmed guest oper
  assert.equal(retry.revision,1);g.c.send(f.result(retry));
  assert.equal((await g.c.next(m=>m.type==='commit'&&m.id==='in-flight')).revision,2);
  const late=await f.join();assert.equal(late.state.events.length,1);
+});
+
+
+test('competitive rooms keep companies across reconnects and reject opponent edits',async t=>{
+ const f=await fixture(t),key='host-key-123456789012345678901234567890';
+ const h=await f.host({mode:'versus',companyKey:key,context});
+ const g=await f.join({companyKey:'guest-key-123456789012345678901234567890'});
+ const hc=h.state.company,gc=g.state.company;assert.notEqual(hc,gc);
+ assert.equal(g.state.competition.companies.length,2);
+ assert.equal(g.state.competition.companies[1].cash,10000);
+ // The authenticated host reports the native model's new asset ownership.
+ h.c.send({type:'command',id:'build',op:{op:'route',from:{kind:'free',x:0,y:0,level:0},to:{kind:'free',x:1,y:0,level:0},pis:[],single:false}});
+ const request=await h.c.next(m=>m.type==='execute');assert.equal(request.company,hc);
+ const before={...context,competition:g.state.competition};
+ const after={...before,competition:{...before.competition,owners:{'edge:1':hc,'node:1':hc,'line:1':hc}}};
+ h.c.send({type:'result',id:request.id,actor:request.actor,result:{answer:{ok:true,issues:[],charge:0},before,after}});
+ await g.c.next(m=>m.type==='commit');
+ for(const op of [{op:'removeEdge',edge:1},{op:'lineLook',line:1,name:'Stolen'},{op:'route',from:{kind:'node',node:1},to:{kind:'free',x:2,y:0,level:0},pis:[],single:true},{op:'undo'},{op:'fares',base:0,perKm:0}]){
+  g.c.send({type:'command',company:hc,id:op.op,op});assert.equal((await g.c.next(m=>m.type==='error'&&m.id===op.op)).code,'ownership');
+ }
+ g.c.send({type:'command',id:'mine',op:{op:'constructAll'}});
+ const own=await h.c.next(m=>m.type==='execute'&&m.id==='mine');assert.deepEqual(own.op,{op:'construct',edges:[],stations:[],buses:[]});
+ h.c.ws.close(1000,'bye');await g.c.next(m=>m.type==='room'&&m.host===g.state.self);
+ g.c.ws.close(1000,'bye');
+ const returning=await f.join({companyKey:key});assert.equal(returning.state.company,hc);
+ assert.equal(returning.state.competition.owners['edge:1'],hc);
+ assert.equal(returning.state.competition.companies.length,2);
 });

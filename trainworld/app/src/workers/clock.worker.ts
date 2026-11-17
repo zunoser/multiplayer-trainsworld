@@ -818,6 +818,21 @@ const MAX_PANICS = 8;
 
 /** the network, cash and fleet after the last load or edit */
 let cooperativeGame = false;
+let competition: import("./protocol").Competition | undefined;
+const assetKey = (kind: number, id: number) => `${["edge", "node", "line"][kind]}:${id}`;
+function companyAssets(): Map<string, number> {
+  const rows = api!.company_assets(), out = new Map<string, number>();
+  for(let i=0;i<rows.length;i+=3)out.set(assetKey(rows[i],rows[i+1]),rows[i+2]);
+  return out;
+}
+function companyFleet(otherThan: string): number[] {
+  const ids=Object.entries(competition!.owners).filter(([key,owner])=>key.startsWith("line:")&&owner!==otherThan).map(([key])=>Number(key.slice(5)));
+  return Array.from(api!.company_fleet(new Uint32Array(ids)));
+}
+function setCompanyFleet(f: number[]) {
+  api!.set_fleet(f[0]);api!.set_fleet_fast(f[1]);api!.set_fleet_bus(f[2]);api!.set_fleet_ferry(f[3]);api!.set_fleet_tram(f[4]);
+}
+
 type Kept = { ids?: Uint32Array; net: Uint8Array; cash: number; fleet: number; fleetFast: number; fleetBus: number; fleetFerry: number; fleetTram: number };
 let kept: Kept | null = null;
 function modelNow(a: TrackApi): Kept {
@@ -2263,6 +2278,24 @@ function settle(): boolean {
         e.points = (e.points ?? 0) + v;
         for (const r of regionEntries(z, d.day, h)) r.points = (r.points ?? 0) + v;
       }
+    }
+    if(competition) {
+      const byCompany=new Map(competition.companies.map(c=>[c.id,c]));
+      for(const [id,per] of lineIncome) {
+        const c=byCompany.get(competition.owners[`line:${id}`]);if(!c)continue;
+        const income=fareHour(per,t+api.line_shift(id),kindOfLine(id))*df;
+        c.revenue+=income;c.cash+=income;
+      }
+      for(const row of rl.costs) {
+        const c=byCompany.get(competition.owners[`line:${row.id}`]);if(!c)continue;
+        const cost=costHour(row.run,t+row.shift,row.tail)*dc;
+        c.running+=cost;c.cash-=cost;
+      }
+      for(const [key,perDay] of companyAssets()) {
+        const c=byCompany.get(competition.owners[key]);if(!c)continue;
+        const cost=perDay/24*dc;c.upkeep+=cost;c.cash-=cost;
+      }
+      cash=competition.companies.reduce((v,c)=>v+c.cash,0);
     }
     settledT = full ? t + 3600 : end;
     if (full) { ended = true; hourShape.delete(h); }
@@ -4081,9 +4114,11 @@ onmessage = (e: MessageEvent<ToClock>) => {
 };
 function cooperativeContext(): CooperativeContext {
   const { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions } = header();
-  return { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions, rate: clk.rate };
+  return { clock, cash, loan, loanPay, loanDays, fleet, fleetFast, fleetBus, fleetFerry, fleetTram, fares, ledger, hours, regions, rate: clk.rate, ...(competition ? {competition: structuredClone(competition)} : {}) };
 }
 function takeCooperativeContext(c: CooperativeContext) {
+  competition = c.competition ? structuredClone(c.competition) : undefined;
+  if(competition) api!.set_unlimited(false);
   clk = { t: c.clock, rate: c.rate, at: wallNow() };
   settledT = c.clock;
   partHour = Math.floor(c.clock / 3600);
@@ -4118,6 +4153,14 @@ async function processMessage(msg: ToClock) {
     const rate = msg.context?.rate ?? clk.rate;
     if (msg.context) takeCooperativeContext(msg.context);
     const before = cooperativeContext();
+    const company = competition?.companies.find(c=>c.id===msg.company);
+    if(competition && !company)throw new Error("Unknown company");
+    const assets = competition ? companyAssets() : null;
+    const otherFleet = company ? companyFleet(company.id) : null;
+    if(company) {
+      api.set_cash(company.cash);api.set_unlimited(false);
+      setCompanyFleet(company.fleet.map((n,i)=>n+otherFleet![i]));
+    }
     clk = { t: before.clock, rate: 0, at: wallNow() };
     settledT = before.clock;
     cooperativeCapture = { seq: msg.seq };
@@ -4126,6 +4169,16 @@ async function processMessage(msg: ToClock) {
       if (followUp) await guardedFollowUp();
       const answer = cooperativeCapture.answer;
       if (!answer) throw new Error("Edit returned no answer");
+      if(company) {
+        company.cash=api.cash();company.spent+=answer.charge;
+        company.fleet=[api.fleet(),api.fleet_fast(),api.fleet_bus(),api.fleet_ferry(),api.fleet_tram()].map((n,i)=>Math.max(0,n-otherFleet![i]));
+        const now=companyAssets();
+        for(const key of assets!.keys())if(!now.has(key))delete competition!.owners[key];
+        for(const key of now.keys())if(!assets!.has(key))competition!.owners[key]=company.id;
+        // Native affordability uses one wallet; shared simulation cash remains the sum.
+        api.set_cash(competition!.companies.reduce((v,c)=>v+c.cash,0));
+        setCompanyFleet([0,1,2,3,4].map(i=>competition!.companies.reduce((v,c)=>v+c.fleet[i],0)));
+      }
       clk = { t: before.clock, rate, at: wallNow() };
       send({ kind: "coopResult", seq: msg.seq, result: { answer, before, after: cooperativeContext() } });
     } catch (error) { send({ kind: "coopResult", seq: msg.seq, error: String(error) }); }
@@ -4134,6 +4187,7 @@ async function processMessage(msg: ToClock) {
   }
   if (msg.kind === "coopSnapshot") {
     cooperativeGame = true;
+    competition = undefined;
     await ready;
     if (followUp) await guardedFollowUp();
     try {

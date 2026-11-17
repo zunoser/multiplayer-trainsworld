@@ -371,7 +371,7 @@ function cooperativeRequest<T>(make: (seq: number) => ToClock): Promise<T> {
     current!.post(make(seq));
   });
 }
-export const runCooperativeCommand = (op: EditOp, context?: CooperativeContext) => cooperativeRequest<CooperativeResult>(seq => ({ kind: "coopCommand", seq, op, context }));
+export const runCooperativeCommand = (op: EditOp, context?: CooperativeContext, company?: string) => cooperativeRequest<CooperativeResult>(seq => ({ kind: "coopCommand", seq, op, context, company }));
 export const readCooperativeContext = () => cooperativeRequest<CooperativeContext>(seq => ({ kind: "coopRead", seq }));
 export const exportCooperativeSave = () => cooperativeRequest<{ bytes: Uint8Array; ids: Uint32Array }>(seq => ({ kind: "coopExport", seq }));
 export function takeCooperativeTime(context: CooperativeContext) { current?.post({ kind: "coopTime", context }); }
