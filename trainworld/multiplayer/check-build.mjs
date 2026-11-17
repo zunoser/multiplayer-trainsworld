@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
-const createMiniflare = options => new Miniflare(convertV4MiniflareOptions(options));
+import { Miniflare } from './miniflare-v4.mjs';
 
 const root = new URL('./.cloudflare/output/v1/workers/default/', import.meta.url);
 const config = JSON.parse(await readFile(new URL('worker.config.json', root), 'utf8'));
@@ -19,7 +18,7 @@ assert.equal(config.env.ROOMS.worker, 'multiplayer-trainsworld');
 assert.equal(config.env.LOGIN_LIMIT.namespace, '901762011');
 assert.equal(config.exports.RailwayRoom.storage, 'sqlite');
 const directory = fileURLToPath(new URL('assets/', root));
-const mf = createMiniflare({
+const mf = new Miniflare({
   modules: true, scriptPath: fileURLToPath(new URL(`bundle/${config.manifest.mainModule}`, root)),
   compatibilityDate: config.compatibilityDate,
   durableObjects: { ROOMS: { className: 'RailwayRoom', useSQLite: true } },
