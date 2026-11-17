@@ -28,20 +28,14 @@ Validation: `node trainworld/checks/competition.mjs` exercises two real WASM cli
 
 ## Run locally
 
-From the repository root, with Node 22+, Rust and wasm-pack 0.15 installed:
+From the repository root, with Vite+, rustup and wasm-pack 0.15.0 installed:
 
 ```sh
-npm --prefix trainworld/app ci
-npm --prefix trainworld/app run wasm
-npm --prefix trainworld/multiplayer ci
-npm --prefix trainworld/multiplayer start
+vp install --frozen-lockfile
+vp run dev
 ```
 
-In a second terminal:
-
-```sh
-npm --prefix trainworld/app run dev -- --host 0.0.0.0
-```
+This root task builds WASM and starts both local servers. For frontend-only development after a build, use vp dev.
 
 Open `http://127.0.0.1:5173/`. The development password defaults to `local-test-password`; override it with `ROOM_PASSWORD`. Miniflare runs the real Workers/Durable Objects implementation on port 8787 with local SQLite persistence under gitignored `artifacts/multiplayer-state`. Vite proxies `/api` and `/multiplayer` to it. The local origin exception is set only in the development runner, never in production bindings.
 
@@ -49,7 +43,9 @@ Open `http://127.0.0.1:5173/`. The development password defaults to `local-test-
 
 `cloudflare.config.ts` declares the Worker, SQLite Durable Object, secret, rate limiter and observability. This project uses the Cloudflare `cf` configuration model, not a hand-maintained Wrangler project. Static assets are the Vite output in `trainworld/app/dist/`.
 
-Build with `npm --prefix trainworld/app run build`. Upload that exact directory through Workers Static Assets (the `assets.mjs` helper prepares media-type-aware SHA-256 asset keys and uploads the buckets with the correct per-file Content-Type from a Cloudflare upload session). Deploy `src/index.mjs` with:
+Build the complete release with vp run build. The Worker uses the Cloudflare Vite plugin through vp build;
+the root task prepares the frontend assets, builds the Worker and verifies the Build Output Specification.
+The release retains these settings:
 
 - `ROOMS`: a SQLite Durable Object namespace for the `RailwayRoom` export.
 - `ROOM_PASSWORD`: a secret text binding with a strong shared password.
@@ -60,7 +56,9 @@ Build with `npm --prefix trainworld/app run build`. Upload that exact directory 
 
 Keep Workers CacheW disabled: ordinary Workers Static Assets requests are free and unlimited, while opted-in Workers caching has different billing. Do not add a paid TURN service, R2, D1, cron job, or another service to this deployment without reviewing its costs. No Oracle VM is required. Bind the custom domain to this Worker only after the authenticated endpoints and application are verified.
 
-Cloudflare's API/connected tooling can create the asset-upload session and final multipart deployment; `node trainworld/multiplayer/assets.mjs manifest <file>` and `... upload <session-file> <completion-file>` handle local files without exposing API credentials. Upload session files and completion JWTs are temporary secrets and belong outside Git. Ordinary cf project deployment should use an appropriate build adapter to supply these Vite assets; the Worker config itself deliberately has no unsupported `assets.directory` option.
+GitHub Actions deploys the verified artifact from main with vp run deploy. Pull requests run the build and dry run
+without deployment credentials. See [automatic deployment](../docs/automatic-deployment.md). The cf CLI remains
+the Cloudflare uploader; application and Worker bundling use Vite+.
 
 ## Expected cost for five people
 
@@ -86,8 +84,8 @@ Sources checked 2026-11-17: [DO pricing](https://developers.cloudflare.com/durab
 ## Validation
 
 ```sh
-npm --prefix trainworld/multiplayer test
-npm --prefix trainworld/app run check
+vp test
+vp check --quiet
 NODE_USE_ENV_PROXY=1 node trainworld/multiplayer/check-deployment.mjs https://trains.aomona.me/
 cargo test --manifest-path trainworld/sim/Cargo.toml --release
 cargo test --manifest-path trainworld/sim/Cargo.toml --release --features demand --lib

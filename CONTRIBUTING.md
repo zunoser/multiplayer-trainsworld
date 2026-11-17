@@ -14,7 +14,7 @@ has a different hash from yours.
 
 ## Before you send one
 
-- `cd trainworld/app && npm run check` passes.
+- From the repository root, vp install --frozen-lockfile and vp run verify pass.
 - After a change in `trainworld/sim/`, from `trainworld/sim` run `cargo test --release` and
   `cargo test --release --features demand --lib`.
 - If you changed what players see, say what changed. Text in the game follows `trainworld/docs/ui-panels.md`,

@@ -1,14 +1,27 @@
-import { copyFileSync, createReadStream, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import {
+  copyFileSync,
+  createReadStream,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { execSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, lazyPlugins } from "vite-plus";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // TW_PACKS: a frozen copy instead (pipeline/freeze.py build, T-928)
 const PACKS = process.env.TW_PACKS ? resolve(process.env.TW_PACKS) : resolve(here, "../data/packs");
 /** The packs the game opens: the registry's cities (T-125), and its regional market. Pipeline output, gitignored. */
-const REGISTRY = JSON.parse(readFileSync(resolve(here, "src/game/registry.json"), "utf8")) as { cities: { id: string }[]; market: { pack: string } };
+const REGISTRY = JSON.parse(readFileSync(resolve(here, "src/game/registry.json"), "utf8")) as {
+  cities: { id: string }[];
+  market: { pack: string };
+};
 const CITIES = REGISTRY.cities.map((c) => c.id);
 /** T-1270: each zone's terrain classes (pipeline/zone_terrain.py), served at `packs/terrain/<id>.terrain`, so they publish with the packs. */
 const TERRAIN = resolve(here, "../data/terrain");
@@ -17,11 +30,17 @@ const TERRAIN_OVER = process.env.TW_TERRAIN ? resolve(process.env.TW_TERRAIN) : 
 /** T-2901: the terrain classes of the world's land, one file per degree block (pipeline/world_terrain.py), at
  * `packs/terrain-world/`; TW_TERRAIN_WORLD: another copy. A build holds them as hard links (0.7 GB, 19k files), and
  * tools/deploy.py publishes them on their own, not with each release. */
-const TERRAIN_WORLD = process.env.TW_TERRAIN_WORLD ? resolve(process.env.TW_TERRAIN_WORLD) : resolve(here, "../data/terrain-world-v2");
+const TERRAIN_WORLD = process.env.TW_TERRAIN_WORLD
+  ? resolve(process.env.TW_TERRAIN_WORLD)
+  : resolve(here, "../data/terrain-world-v2");
 /** T-1285: the world's coarse water (pipeline/world_water.py), served at `packs/world.water`; TW_WORLD_WATER: another copy. */
-const WORLD_WATER = process.env.TW_WORLD_WATER ? resolve(process.env.TW_WORLD_WATER) : join(TERRAIN, "world.water");
+const WORLD_WATER = process.env.TW_WORLD_WATER
+  ? resolve(process.env.TW_WORLD_WATER)
+  : join(TERRAIN, "world.water");
 /** T-279: the market's routed drives (pipeline/market_drives.py), served at `packs/market-drives.bin`; TW_MARKET_DRIVES: another copy. */
-const MARKET_DRIVES = process.env.TW_MARKET_DRIVES ? resolve(process.env.TW_MARKET_DRIVES) : join(PACKS, "market-drives.bin");
+const MARKET_DRIVES = process.env.TW_MARKET_DRIVES
+  ? resolve(process.env.TW_MARKET_DRIVES)
+  : join(PACKS, "market-drives.bin");
 
 /** TW_LINK_PACKS=1 (snapbuild.cmd): a build holds the packs as hard links to the data files instead of copies, 6 GB in
  * 5 s instead of 35. Safe because every pipeline writer replaces a pack (a .part renamed over it), never rewrites it in
@@ -79,9 +98,17 @@ function packs(): Plugin {
         const size = statSync(file).size;
         const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? "");
         res.setHeader("Accept-Ranges", "bytes");
-        res.setHeader("Content-Type", file.endsWith(".geojson") ? "application/geo+json" : file.endsWith(".json") ? "application/json" : "application/octet-stream");
+        res.setHeader(
+          "Content-Type",
+          file.endsWith(".geojson")
+            ? "application/geo+json"
+            : file.endsWith(".json")
+              ? "application/json"
+              : "application/octet-stream",
+        );
         if (range) {
-          const a = Number(range[1]), b = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+          const a = Number(range[1]),
+            b = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
           res.statusCode = 206;
           res.setHeader("Content-Range", `bytes ${a}-${b}/${size}`);
           res.setHeader("Content-Length", b - a + 1);
@@ -105,9 +132,13 @@ function packs(): Plugin {
       server.middlewares.use("/packs/terrain", (req, res) => {
         const name = (req.url ?? "").split("?")[0].replace(/^\/+/, "");
         const over = TERRAIN_OVER ? join(TERRAIN_OVER, name) : null;
-        const file = over && over.startsWith(TERRAIN_OVER!) && existsSync(over) ? over : join(TERRAIN, name);
+        const file =
+          over && over.startsWith(TERRAIN_OVER!) && existsSync(over) ? over : join(TERRAIN, name);
         // a zone without a file is a 404, never the page (the clock worker reads it as no terrain)
-        if (!(file.startsWith(TERRAIN) || (TERRAIN_OVER && file.startsWith(TERRAIN_OVER))) || !existsSync(file)) {
+        if (
+          !(file.startsWith(TERRAIN) || (TERRAIN_OVER && file.startsWith(TERRAIN_OVER))) ||
+          !existsSync(file)
+        ) {
           res.statusCode = 404;
           res.end();
           return;
@@ -124,8 +155,10 @@ function packs(): Plugin {
         for (const ext of [".json", ".bin", ".boundary.geojson", ".places.json", ".market.json"]) {
           const src = join(PACKS, c + ext);
           if (existsSync(src)) put(src, join(out, c + ext));
-          else if (ext === ".places.json") this.warn(`place list missing: ${src} (build it with pipeline/places.py ${c})`);
-          else if (ext === ".market.json") this.warn(`market pack missing: ${src} (build it with pipeline/market_zones.py ${c})`);
+          else if (ext === ".places.json")
+            this.warn(`place list missing: ${src} (build it with pipeline/places.py ${c})`);
+          else if (ext === ".market.json")
+            this.warn(`market pack missing: ${src} (build it with pipeline/market_zones.py ${c})`);
           else this.warn(`city pack missing: ${src} (build it with pipeline/build_city.py ${c})`);
         }
       // T-1270: the zones' terrain classes; a zone without one prices its track on flat ground
@@ -137,14 +170,19 @@ function packs(): Plugin {
         if (existsSync(src)) put(src, join(terrain, c + ".terrain"));
         else noTerrain++;
       }
-      if (noTerrain) this.warn(`${noTerrain} zones have no terrain file: run pipeline/zone_terrain.py build`);
+      if (noTerrain)
+        this.warn(`${noTerrain} zones have no terrain file: run pipeline/zone_terrain.py build`);
       if (existsSync(join(TERRAIN_WORLD, "index.bin"))) {
         const world = join(out, "terrain-world");
         mkdirSync(world, { recursive: true });
         for (const f of readdirSync(TERRAIN_WORLD)) {
           const dst = join(world, f);
           if (existsSync(dst)) continue;
-          try { linkSync(join(TERRAIN_WORLD, f), dst); } catch { copyFileSync(join(TERRAIN_WORLD, f), dst); }
+          try {
+            linkSync(join(TERRAIN_WORLD, f), dst);
+          } catch {
+            copyFileSync(join(TERRAIN_WORLD, f), dst);
+          }
         }
       } else this.warn("terrain blocks missing: run pipeline/world_terrain.py build");
       if (existsSync(WORLD_WATER)) put(WORLD_WATER, join(out, "world.water"));
@@ -159,13 +197,16 @@ function packs(): Plugin {
       const real = join(PACKS, "real");
       if (existsSync(real)) {
         mkdirSync(join(out, "real"), { recursive: true });
-        for (const f of readdirSync(real)) if (f.endsWith(".save")) put(join(real, f), join(out, "real", f));
+        for (const f of readdirSync(real))
+          if (f.endsWith(".save")) put(join(real, f), join(out, "real", f));
       } else this.warn("real networks missing: run pipeline/realnet.py ship");
       // T-727: the real network's routing graphs the track tool snaps along (pipeline/realgraph.py)
       const graphs = join(PACKS, "realgraph");
       if (existsSync(graphs)) {
         mkdirSync(join(out, "realgraph"), { recursive: true });
-        for (const f of readdirSync(graphs)) if (f.endsWith(".rgr") || f === "index.json") put(join(graphs, f), join(out, "realgraph", f));
+        for (const f of readdirSync(graphs))
+          if (f.endsWith(".rgr") || f === "index.json")
+            put(join(graphs, f), join(out, "realgraph", f));
       } else this.warn("real-network graphs missing: run pipeline/realgraph.py <regions>");
     },
   };
@@ -176,7 +217,9 @@ function packs(): Plugin {
 function version(): string {
   if (process.argv.includes("build") === false) return "dev";
   try {
-    return execSync("git rev-list --count HEAD", { cwd: dirname(fileURLToPath(import.meta.url)) }).toString().trim();
+    return execSync("git rev-list --count HEAD", { cwd: dirname(fileURLToPath(import.meta.url)) })
+      .toString()
+      .trim();
   } catch {
     return "dev";
   }
@@ -194,7 +237,9 @@ function version(): string {
 function dataFallback(): Plugin {
   const ORIGIN = "https://data.anita.garden";
   const versionFile = resolve(here, "../data-version.txt");
-  const version = process.env.TW_DATA_VERSION || (existsSync(versionFile) ? readFileSync(versionFile, "utf8").trim() : "");
+  const version =
+    process.env.TW_DATA_VERSION ||
+    (existsSync(versionFile) ? readFileSync(versionFile, "utf8").trim() : "");
   const on = process.env.TW_DATA !== "off" && !!version && !existsSync(PACKS);
   // fetch has already undone a gzip Content-Encoding, so that header and the length are not passed on
   const KEEP = ["content-type", "content-range", "accept-ranges", "cache-control", "etag"];
@@ -205,19 +250,31 @@ function dataFallback(): Plugin {
       handler(_html, ctx) {
         if (!on || ctx.server) return [];
         return [
-          { tag: "meta", attrs: { name: "tw-data", content: `${ORIGIN}/trainworld/${version}/` }, injectTo: "head" },
-          { tag: "meta", attrs: { name: "tw-terrain", content: `${ORIGIN}/trainworld/terrain-world/v2/` }, injectTo: "head" },
+          {
+            tag: "meta",
+            attrs: { name: "tw-data", content: `${ORIGIN}/trainworld/${version}/` },
+            injectTo: "head",
+          },
+          {
+            tag: "meta",
+            attrs: { name: "tw-terrain", content: `${ORIGIN}/trainworld/terrain-world/v2/` },
+            injectTo: "head",
+          },
         ];
       },
     },
     configureServer(server) {
       if (!on) return;
-      console.log(`[data] no local data/packs: fetching the game's data from ${ORIGIN}/trainworld/${version}/ as the page asks`);
+      console.log(
+        `[data] no local data/packs: fetching the game's data from ${ORIGIN}/trainworld/${version}/ as the page asks`,
+      );
       server.middlewares.use(async (req: any, res: any, next: () => void) => {
         const url: string = req.url ?? "";
         let target: string;
-        if (url.startsWith("/packs/terrain-world/")) target = `${ORIGIN}/trainworld/terrain-world/v2/${url.slice("/packs/terrain-world/".length)}`;
-        else if (url.startsWith("/packs/")) target = `${ORIGIN}/trainworld/${version}/${url.slice("/packs/".length)}`;
+        if (url.startsWith("/packs/terrain-world/"))
+          target = `${ORIGIN}/trainworld/terrain-world/v2/${url.slice("/packs/terrain-world/".length)}`;
+        else if (url.startsWith("/packs/"))
+          target = `${ORIGIN}/trainworld/${version}/${url.slice("/packs/".length)}`;
         else if (url.startsWith("/noritetsu/")) target = `${ORIGIN}${url}`;
         else return next();
         try {
@@ -225,7 +282,10 @@ function dataFallback(): Plugin {
           if (req.headers.range) headers.range = req.headers.range;
           const r = await fetch(target, { headers });
           res.statusCode = r.status;
-          for (const k of KEEP) { const v = r.headers.get(k); if (v) res.setHeader(k, v); }
+          for (const k of KEEP) {
+            const v = r.headers.get(k);
+            if (v) res.setHeader(k, v);
+          }
           const body = Buffer.from(await r.arrayBuffer());
           res.setHeader("content-length", body.length);
           res.end(body);
@@ -243,10 +303,22 @@ export default defineConfig({
   base: "./",
   worker: { format: "es" },
   // T-328: the app build, part of the demand cache's key: new at each build and dev-server start
-  define: { __TW_BUILD__: JSON.stringify(Date.now().toString(36)), __TW_VERSION__: JSON.stringify(version()) },
+  define: {
+    __TW_BUILD__: JSON.stringify(Date.now().toString(36)),
+    __TW_VERSION__: JSON.stringify(version()),
+  },
   build: { outDir: "dist", target: "es2022" },
   // T-682: the real-network layer reads noritetsu's tiles beside the game (map/realNetwork.ts); 8800 serves them
   // at /noritetsu/ and sends no CORS headers, so the dev server passes the path through
-  server: { proxy: { "/noritetsu": "http://localhost:8800", "/api": "http://127.0.0.1:8787", "/multiplayer": { target: "ws://127.0.0.1:8787", ws: true } } },
-  plugins: [dataFallback(), packs()],
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/noritetsu": "http://localhost:8800",
+      "/api": "http://127.0.0.1:8787",
+      "/multiplayer": { target: "ws://127.0.0.1:8787", ws: true },
+    },
+  },
+  plugins: lazyPlugins(() => [dataFallback(), packs()]),
 });

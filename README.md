@@ -16,19 +16,39 @@ paths from this repo's root, so `node trainworld/checks/smoke.mjs` means what it
 
 ## Run it
 
-You need Node 22 or newer, Rust (stable) with the `wasm32-unknown-unknown` target, and wasm-pack 0.15.
+Install [Vite+](https://viteplus.dev/guide/) and Rust through rustup. The repository pins Vite+ 1.7.0,
+Node 24.22.0, Bun 1.3.12 and Rust 1.96.0. Vite+ selects Bun from the root packageManager field;
+there is one workspace and one bun.lock for the app and Worker. bunfig.toml selects Bun's hoisted layout
+for compatibility with the Vite dependency scanner on Windows.
 
 ```
-rustup target add wasm32-unknown-unknown
-cargo install wasm-pack
-cd trainworld/app
-npm install
-npm run wasm
-npm run dev
+vp env use 24.22.0 bun@1.3.12
+vp install --frozen-lockfile
+rustup show
+cargo install wasm-pack --version 0.15.0 --locked
+vp run dev
 ```
 
-Open the address Vite prints (http://localhost:5173/). `npm run wasm` takes a few minutes the first time. Run it
-again when anything in `trainworld/sim/` changes. `npm run check` type-checks the page.
+Open http://127.0.0.1:5173/. The development password is local-test-password. The dev task builds both WASM
+modules, then starts Vite+ and the local Worker together. The first Rust build takes a few minutes.
+If another runtime manager keeps Node in system-first mode, enable Vite+ Node management with
+vp env on node, or prefix a command with vp env exec --node 24.22.0 --package-manager bun@1.3.12.
+
+Run commands from the repository root:
+
+| Command | Purpose |
+| --- | --- |
+| vp check --quiet | Lint and type-check the app and configuration |
+| vp test | Run all JavaScript unit and Worker integration tests |
+| vp run verify | Check toolchain formatting, lint/types, Rust and JavaScript tests |
+| vp run build | Build both WASM modules, the app and Worker; check the packaged release |
+| vp build | Build just the frontend, using the existing WASM output |
+| vp run test:competition | Run the real-browser competition regression against the dev servers |
+| vp run test:multiplayer | Run the real-browser cooperative regression |
+
+Tests import vite-plus/test and run through vp test. Existing source formatting is preserved; CI checks formatting
+of the toolchain files and migrated tests. The existing lint warnings are visible with vp lint; CI fails on errors.
+See [the CI and deployment guide](trainworld/docs/automatic-deployment.md) for caches and release artifacts.
 
 ## Cooperative multiplayer
 
@@ -40,8 +60,8 @@ using Cloudflare Workers and SQLite Durable Objects. See [multiplayer setup and 
 The game needs city packs, terrain, outlines and real rail networks, about 6 GB in all. They are not in this repo.
 With no `trainworld/data/packs` folder, the dev server fetches the files the page asks for from
 https://data.anita.garden/trainworld/. A first session downloads tens of MB. The published version it reads is
-named in `trainworld/data-version.txt`. To pin another one, run `TW_DATA_VERSION=<folder> npm run dev`. To stay
-offline, run `TW_DATA=off npm run dev` and fill `trainworld/data/` yourself.
+named in `trainworld/data-version.txt`. To pin another one, set TW_DATA_VERSION before vp run dev. To stay
+offline, set TW_DATA=off and fill trainworld/data/ yourself.
 
 The basemap tiles come from OpenFreeMap and need no key.
 

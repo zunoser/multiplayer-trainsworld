@@ -1,0 +1,25 @@
+{
+  "name": "trainsworld-workspace",
+  "private": true,
+  "workspaces": [
+    "trainworld/app",
+    "trainworld/multiplayer"
+  ],
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "playwright": "1.65.1",
+    "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8000",
+    "vite-plus": "1.7.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8000"
+  },
+  "engines": {
+    "node": "24.22.x"
+  },
+  "packageManager": "bun@1.3.12",
+  "trustedDependencies": [
+    "workerd"
+  ]
+}

@@ -192,7 +192,7 @@ export async function startVite(port) {
  * "export { a } from '@app/src/x.ts';".
  */
 export async function loadApp(spec) {
-  const { build } = await import(pathToFileURL(join(HERE, '../app/node_modules/vite/dist/node/index.js')).href);
+  const { build } = await import('vite-plus');
   const app = fileURLToPath(new URL('../app', import.meta.url)).replace(/\\/g, '/');
   const virtual = /\bexport\b/.test(spec);
   const bundle = await build({
@@ -213,10 +213,15 @@ export async function bundleDemandWorker(name) {
   await mkdir(dir, { recursive: true });
   const compiled = join(dir, 'demand-worker.mjs'), wrapper = join(dir, 'worker-adapter.mjs');
   const wasm = fileURLToPath(new URL('../app/src/wasm/demand/sim_bg.wasm', import.meta.url));
-  const { rolldown } = await import(pathToFileURL(join(HERE, '../app/node_modules/rolldown/dist/index.mjs')).href);
-  const bundle = await rolldown({ input: fileURLToPath(new URL('../app/src/workers/demand.worker.ts', import.meta.url)), platform: 'browser', transform: { define: { 'import.meta.env.DEV': 'false' } } });
-  await bundle.write({ file: compiled, format: 'esm', codeSplitting: false });
-  await bundle.close();
+  const { build } = await import('vite-plus');
+  await build({
+    configFile: false, publicDir: false, logLevel: 'silent',
+    build: {
+      outDir: dir, emptyOutDir: false, minify: false,
+      lib: { entry: fileURLToPath(new URL('../app/src/workers/demand.worker.ts', import.meta.url)), formats: ['es'], fileName: () => 'demand-worker.mjs' },
+      rolldownOptions: { output: { codeSplitting: false } },
+    },
+  });
   writeFileSync(wrapper, `import {parentPort} from 'node:worker_threads';
 import {readFileSync} from 'node:fs';
 globalThis.onmessage=null;
