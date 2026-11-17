@@ -4147,6 +4147,10 @@ function takeCooperativeContext(c: CooperativeContext) {
   ledger = mergeLedger(c.ledger, d => d.day);
   hourLedger = mergeLedger(c.hours, d => d.hour);
   loadRegions(c.regions);
+  if (competition) {
+    api!.set_cash(competition.companies.reduce((sum, company) => sum + company.cash, 0));
+    setCompanyFleet([0,1,2,3,4].map(i => competition!.companies.reduce((sum, company) => sum + company.fleet[i], 0)));
+  }
 }
 
 async function processMessage(msg: ToClock) {
@@ -4174,6 +4178,10 @@ async function processMessage(msg: ToClock) {
     const assets = competition ? companyAssets() : null;
     const otherFleet = company ? companyFleet(company.id) : null;
     if(company) {
+      const other = (kind: string) => new Uint32Array(Object.entries(competition!.owners)
+        .filter(([key, owner]) => owner !== company.id && key.startsWith(kind + ":"))
+        .map(([key]) => Number(key.split(":")[1])));
+      api.protect_company_assets(other("edge"), other("node"), other("line"));
       api.set_cash(company.cash);api.set_unlimited(false);
       setCompanyFleet(company.fleet.map((n,i)=>n+otherFleet![i]));
     }
@@ -4197,8 +4205,11 @@ async function processMessage(msg: ToClock) {
       }
       clk = { t: before.clock, rate, at: wallNow() };
       send({ kind: "coopResult", seq: msg.seq, result: { answer, before, after: cooperativeContext() } });
-    } catch (error) { send({ kind: "coopResult", seq: msg.seq, error: String(error) }); }
-    finally { cooperativeCapture = null; }
+    } catch (error) {
+      takeCooperativeContext(before);
+      send({ kind: "coopResult", seq: msg.seq, error: String(error) });
+    }
+    finally { api.clear_company_protection(); cooperativeCapture = null; }
     return;
   }
   if (msg.kind === "coopSnapshot") {

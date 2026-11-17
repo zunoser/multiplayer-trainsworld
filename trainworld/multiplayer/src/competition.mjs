@@ -1,5 +1,21 @@
 // Explicit ownership checks. Unknown/global operations are refused in competitive rooms.
 export const STARTING_CASH=10000;
+export function compactContext(context) {
+ if(!context?.competition)return context;
+ const companies=context.competition.companies, fleet=Array.from({length:5},(_,i)=>companies.reduce((n,c)=>n+c.fleet[i],0));
+ return {...context,cash:companies.reduce((n,c)=>n+c.cash,0),fleet:fleet[0],fleetFast:fleet[1],fleetBus:fleet[2],fleetFerry:fleet[3],fleetTram:fleet[4],
+  ownershipOmitted:true,competition:{companies,owners:{}}};
+}
+export function applyOwnershipDelta(owners,delta,company,companies,copy=true) {
+ const next=copy?{...owners}:owners, ids=new Set(companies.map(c=>c.id));
+ for(const [key,owner] of Object.entries(delta)) {
+  if(!/^(edge|node|line):(?:0|[1-9][0-9]{0,6})$/.test(key) ||
+     (owner!==null&&(!ids.has(owner)||owner!==company)) ||
+     (owners[key]!==undefined&&owners[key]!==company))return null;
+  if(owner===null)delete next[key];else next[key]=owner;
+ }
+ return next;
+}
 export function newCompany(id,name){return {id,name,cash:STARTING_CASH,revenue:0,running:0,upkeep:0,spent:0,fleet:[0,0,0,0,0]};}
 export function ownedOperation(op,company,owners){
  const own=(kind,id)=>Number.isSafeInteger(id)&&owners[`${kind}:${id}`]===company;

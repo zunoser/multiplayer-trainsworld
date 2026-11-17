@@ -198,9 +198,9 @@ export type EditOp =
 
 export type Company = { id: string; name: string; cash: number; revenue: number; running: number; upkeep: number; spent: number; fleet: number[] };
 export type Competition = { companies: Company[]; owners: Record<string, string> };
-export type CooperativeContext = Pick<SaveHeader, "clock" | "cash" | "loan" | "loanPay" | "loanDays" | "fleet" | "fleetFast" | "fleetBus" | "fleetFerry" | "fleetTram" | "fares" | "ledger" | "hours" | "regions"> & { rate: number; competition?: Competition };
+export type CooperativeContext = Pick<SaveHeader, "clock" | "cash" | "loan" | "loanPay" | "loanDays" | "fleet" | "fleetFast" | "fleetBus" | "fleetFerry" | "fleetTram" | "fares" | "ledger" | "hours" | "regions"> & { rate: number; competition?: Competition; ownershipOmitted?: boolean };
 export type CooperativeAnswer = { ok: boolean; issues: string[]; charge: number; line?: number; node?: number; skipped?: number };
-export type CooperativeResult = { answer: CooperativeAnswer; before: CooperativeContext; after: CooperativeContext };
+export type CooperativeResult = { answer: CooperativeAnswer; before: CooperativeContext; after: CooperativeContext; ownershipDelta?: Record<string, string | null> };
 
 export type ToClock =
   | { kind: "freezeTrace"; port: MessagePort }

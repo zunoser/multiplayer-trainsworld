@@ -7,6 +7,10 @@ const SHORT_PIECE_M: f64 = 10.0;
 
 #[wasm_bindgen]
 impl TrackApi {
+    pub fn protect_company_assets(&mut self, edges: &[u32], nodes: &[u32], lines: &[u32]) {
+        self.w.protect_company_assets(edges, nodes, lines);
+    }
+    pub fn clear_company_protection(&mut self) { self.w.clear_company_protection(); }
     // ---- money
     pub fn cash(&self) -> f64 {
         self.cash
@@ -411,6 +415,48 @@ impl TrackApi {
 #[cfg(test)]
 mod company_tests {
     use super::*;
+    #[test]
+    fn company_guard_rejects_station_sweep_over_another_company_track() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.cooperative_enable();
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_point_middle(0), 0);
+        let foreign = a.w.net.edge_data(0);
+        let before = a.save();
+        a.protect_company_assets(&[0], &[0], &[]);
+        assert_ne!(a.add_station(2, 1, 4050., 0., 400, "Boundary".into()), 0);
+        assert_eq!(a.w.net.edge_data(0), foreign);
+        assert_eq!(a.save(), before);
+        a.clear_company_protection();
+        assert_eq!(a.add_station(2, 1, 4050., 0., 400, "Boundary".into()), 0);
+        assert_ne!(a.w.net.edge_data(0), foreign);
+    }
+    #[test]
+    fn company_guard_rolls_back_foreign_splits_moves_and_attachments() {
+        let mut a = TrackApi::new(-73.985, 40.758, true);
+        a.cooperative_enable();
+        a.set_cash(1e6);
+        assert_eq!(a.add_route(&[0., 0., 0., 0., 0., 0., 0., 8000., 0., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_route(&[0., 0., 0., 3000., 0., 0., 0., 8000., 3000., 0.], &[], 2, false), 0);
+        assert_eq!(a.add_station(1, 0, 0., 0., 200, "Foreign A".into()), 0);
+        assert_eq!(a.add_station(1, 1, 0., 0., 200, "Foreign B".into()), 0);
+        a.protect_company_assets(&[0], &[0, 1], &[]);
+        let before = a.save();
+        let cash = a.cash();
+        assert_ne!(a.add_point_middle(0), 0);
+        assert_eq!(a.save(), before);
+        assert_ne!(a.set_node(0, 0., 100., 0, false), 0);
+        assert_eq!(a.save(), before);
+        assert_ne!(a.add_route(&[1., 0., 0., 0., 0., 0., 0., 1000., 1000., 0.], &[], 2, false), 0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.cash(), cash);
+        let line = a.new_line_id();
+        assert_ne!(a.set_line_with_trains(line, &[0, 1], 2, 1, 0, 30., 180., 5, 0, "Not mine".into()), 0);
+        assert_eq!(a.save(), before);
+        assert_eq!(a.set_node(2, 0., 3200., 0, false), 0);
+        a.clear_company_protection();
+        assert_eq!(a.add_point_middle(0), 0);
+    }
     #[test]
     fn company_quote_matches_selected_construction_without_mutating_world() {
         let mut a = TrackApi::new(-73.985, 40.758, true);

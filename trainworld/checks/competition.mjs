@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 import {playwright,ARTIFACTS,buildLine} from './lib.mjs';
 const {chromium}=await playwright();
 const browser=await chromium.launch({headless:true,executablePath:process.env.TW_CHROME??'/usr/bin/chromium',args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -65,6 +65,22 @@ try {
  await guest.keyboard.press('b');assert.equal(await guest.locator('.tool-ferry').isDisabled(),true);
  assert.equal(await guest.getByRole('button',{name:'元に戻す',exact:true}).isDisabled(),true);
  console.log('PASS company quote isolation, disabled blueprint pricing, charged total and read-only opponent inspector');
+ const unaffordable=await guest.evaluate(async()=>{
+  const t=window.tw,before=new Set(t.world.peek().edges.map(e=>e.id));
+  const r=await t.client.edit({op:'route',from:{kind:'free',...t.lngLatToPack(139.9,35.8),level:-3},to:{kind:'free',...t.lngLatToPack(141.4,35.8),level:-3},pis:[],single:false});
+  if(!r.ok)throw Error(JSON.stringify(r));return t.world.peek().edges.filter(e=>!before.has(e.id)).map(e=>e.id);
+ });
+ const poorQuote=await guest.evaluate(company=>window.tw.client.query({what:'companyQuote',company}).then(d=>Array.from(d)),bid);
+ const walletBefore=await host.evaluate(()=>window.tw.multiplayer.readCooperativeContext());
+ assert(poorQuote.reduce((a,b)=>a+b,0)>walletBefore.competition.companies.find(c=>c.id===bid).cash);
+ await guest.waitForFunction(()=>document.querySelector('.blueprint-construct')?.disabled);
+ const noMoney=await guest.evaluate(()=>window.tw.client.edit({op:'constructAll'}));assert.equal(noMoney.ok,false);
+ const walletAfter=await host.evaluate(()=>window.tw.multiplayer.readCooperativeContext());
+ for(const c of walletBefore.competition.companies)
+  assert.equal(walletAfter.competition.companies.find(next=>next.id===c.id).cash,c.cash);
+ assert.equal((await guest.evaluate(edges=>window.tw.client.edit({op:'removePieces',edges,stations:[]}),unaffordable)).ok,true);
+ console.log('PASS unaffordable construction leaves every company wallet unchanged');
+ const betaBackup=await guest.evaluate(()=>window.tw.multiplayer.roomBackup());
  await host.evaluate(()=>window.tw.multiplayer.leaveMultiplayer());
  await guest.waitForFunction(()=>{const s=window.tw.multiplayer.multiplayer.peek();return s.room.host===s.self;});
  await host.evaluate(code=>window.tw.multiplayer.connectMultiplayer('Alpha',code),code);await ready(host);assert.equal(await own(host),aid);
@@ -73,4 +89,35 @@ try {
  assert.equal(await host.evaluate(()=>window.tw.world.peek().save.lines.length),2);
  assert.deepEqual(errors,[]);
  console.log('PASS isolated fleet charges, maintenance, automatic host transfer and company/world recovery after all leave');
+ const downloadPromise=host.waitForEvent('download');
+ await host.getByRole('button',{name:'対戦をバックアップ',exact:true}).click();
+ const download=await downloadPromise,backupBytes=await readFile(await download.path()),alphaBackup=JSON.parse(backupBytes);
+ assert.equal(alphaBackup.archive.competition.companies.length,2);
+ const ctx=await browser.newContext({viewport:{width:375,height:900}});
+ await ctx.addInitScript(()=>Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>2}));
+ const restored=await ctx.newPage();restored.on('pageerror',e=>errors.push(String(e)));
+ await restored.goto(base+'?debug=1&lang=ja');
+ await restored.getByLabel('参加用パスワード',{exact:true}).fill('local-test-password');
+ await restored.getByRole('button',{name:'入る',exact:true}).click();
+ await restored.locator('#multiplayer-lobby-root input[type=file]').setInputFiles({name:'room-backup.json',mimeType:'application/json',buffer:backupBytes});
+ await restored.getByText('room-backup.json',{exact:true}).waitFor();
+ assert.equal(await restored.getByRole('textbox',{name:'プレイヤー名',exact:true}).inputValue(),'Alpha');
+ await restored.screenshot({path:ARTIFACTS+'/company-restore-mobile.png'});
+ await restored.getByRole('button',{name:'ホストを開始',exact:true}).click();
+ await restored.locator('#multiplayer-lobby-root').waitFor({state:'detached',timeout:180000});await ready(restored);
+ assert.equal(await own(restored),aid);
+ const newCode=(await state(restored)).code;assert.notEqual(newCode,code);
+ assert.equal(await restored.evaluate(()=>window.tw.world.peek().save.lines.length),2);
+ const recovered=await restored.evaluate(()=>window.tw.multiplayer.readCooperativeContext());
+ assert.deepEqual(recovered.competition.owners,alphaBackup.archive.competition.owners);
+ for(const company of alphaBackup.archive.competition.companies)
+  assert(Math.abs(recovered.competition.companies.find(c=>c.id===company.id).cash-company.cash)<1e-6);
+ await guest.evaluate(code=>window.tw.multiplayer.connectMultiplayer('Beta',code),newCode);await ready(guest);
+ assert.equal(await own(guest),bid);
+ await guest.evaluate(()=>window.tw.multiplayer.leaveMultiplayer());
+ const newDevice=await fresh();
+ await newDevice.evaluate(({code,backup})=>window.tw.multiplayer.connectMultiplayer('Beta recovered',code,'versus',backup),{code:newCode,backup:betaBackup});
+ await ready(newDevice);assert.equal(await own(newDevice),bid);
+ assert.deepEqual(errors,[]);
+ console.log('PASS downloaded room backup, mobile restore UI, original-browser recovery and new-device company recovery');
 }finally{await browser.close();}

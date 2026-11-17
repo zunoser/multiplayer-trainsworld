@@ -300,6 +300,7 @@ pub struct Crossing {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Issue {
+    CompanyOwnership,
     Geom { edge: u32, issue: GeomIssue },
     GroundOverWater { edge: u32, s: f64 },
     /// A segment drawn at ground level over water that has no room on land for a bridge's

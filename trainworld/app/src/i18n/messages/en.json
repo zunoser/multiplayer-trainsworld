@@ -1,4 +1,11 @@
 {
+  "competition.backup": "Back up company room",
+  "competition.backupTip": "Saves the confirmed room, all company accounts and your company recovery key. Keep this file private.",
+  "competition.restore": "Restore company room",
+  "competition.recover": "Recover my company",
+  "competition.clearBackup": "Clear backup",
+  "multiplayer.error.backup": "This company room backup cannot be restored.",
+  "multiplayer.error.backupSize": "The room backup exceeds the supported size.",
   "account.unreachable": "The server seems to be down. Try again later.",
   "account.answered": "The server answered {status}.",
   "account.noServer": "This copy of the game has no server to send to.",

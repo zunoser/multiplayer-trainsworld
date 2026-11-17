@@ -47,6 +47,7 @@ const TEXT: Record<string, () => string> = {
   DropStop: () => t("issues.dropStop"),
   LineSchedule: () => t("issues.lineSchedule"),
   SplitPoint: () => t("issues.splitPoint"),
+  CompanyOwnership: () => t("multiplayer.error.ownership"),
   NodeInUse: () => t("issues.nodeInUse"),
   NoSuchEdge: () => t("issues.noSuchEdge"),
   StationTrack: () => t("issues.stationTrack"),

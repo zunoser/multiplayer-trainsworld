@@ -1,4 +1,11 @@
 {
+  "competition.backup": "対戦をバックアップ",
+  "competition.backupTip": "確定済みの部屋、各社の会計、自社の復帰キーを保存します。このファイルは他の人に渡さないでください。",
+  "competition.restore": "対戦を復元",
+  "competition.recover": "自社を引き継ぐ",
+  "competition.clearBackup": "選択を解除",
+  "multiplayer.error.backup": "この対戦バックアップは復元できません。",
+  "multiplayer.error.backupSize": "部屋のバックアップが対応サイズを超えています。",
   "account.answered": "サーバーがエラー{status}を返しました。",
   "account.feedbackNotYet": "フィードバックはまだ送れません。数日後にもう一度試してください。",
   "account.noServer": "このゲームには送信先のサーバーがありません。",
